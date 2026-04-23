@@ -1,4 +1,4 @@
-import { Package2, TrendingDown, TrendingUp } from "lucide-react";
+import { Minus, Package2, TrendingDown, TrendingUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -12,7 +12,7 @@ const directionMeta = {
   },
   보합: {
     tone: "gray" as const,
-    icon: Package2
+    icon: Minus
   },
   하락: {
     tone: "amber" as const,
@@ -22,14 +22,14 @@ const directionMeta = {
 
 export function MaterialSummary({ items }: { items: MaterialPriceItem[] }) {
   return (
-    <Card>
+    <Card className="section-enter">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[17px] font-bold tracking-[-0.03em] text-foreground">
             자재 가격 요약
           </p>
           <p className="mt-1 text-[12px] leading-5 text-slate">
-            금융 화면처럼 보이지 않도록 자재 관리 문맥에 맞춰 차분하게 구성했습니다.
+            금융 화면처럼 보이지 않도록 현장 매입 문맥 중심으로 정리했습니다.
           </p>
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -54,7 +54,10 @@ export function MaterialSummary({ items }: { items: MaterialPriceItem[] }) {
                 <Badge tone={meta.tone}>{item.direction}</Badge>
               </div>
               <div className="mt-3 flex items-center justify-between rounded-[16px] bg-white px-3 py-2.5">
-                <p className="text-[12px] text-slate">전주 대비 {item.changeRate}</p>
+                <div>
+                  <p className="text-[12px] text-slate">전주 대비 {item.changeRate}</p>
+                  <p className="mt-0.5 text-[11px] text-slate">{item.note}</p>
+                </div>
                 <div className="flex items-center gap-1 text-[12px] font-semibold text-foreground">
                   <Icon className="h-4 w-4 text-primary" />
                   {item.direction}

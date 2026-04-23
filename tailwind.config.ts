@@ -10,15 +10,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#f4f7f5",
-        foreground: "#111827",
+        background: "#edf2ee",
+        foreground: "#1c2420",
         card: "#ffffff",
-        muted: "#f1f5f2",
-        border: "#dfe8e3",
+        muted: "#f4f7f5",
+        border: "#dfe7e2",
         primary: {
           DEFAULT: "#03c75a",
           foreground: "#ffffff",
-          soft: "#e8f9ef"
+          soft: "#e8f8ef"
         },
         success: "#16a34a",
         warning: "#f59e0b",
@@ -26,7 +26,7 @@ const config: Config = {
         slate: "#667085"
       },
       boxShadow: {
-        soft: "0 10px 30px rgba(15, 23, 42, 0.08)"
+        soft: "0 20px 40px rgba(15, 23, 42, 0.08)"
       },
       backgroundImage: {
         "mobile-surface":
@@ -40,15 +40,6 @@ const config: Config = {
           "system-ui",
           "sans-serif"
         ]
-      },
-      keyframes: {
-        enter: {
-          "0%": { opacity: "0", transform: "translateY(10px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" }
-        }
-      },
-      animation: {
-        enter: "enter 0.45s ease-out both"
       }
     }
   },

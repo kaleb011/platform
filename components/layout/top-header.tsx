@@ -1,12 +1,22 @@
-import { Bell, CircleDot } from "lucide-react";
+import { Bell, CircleDot, CloudSun, MapPin } from "lucide-react";
 
 type TopHeaderProps = {
   siteName: string;
+  siteMeta: string;
   dateLabel: string;
+  weatherLabel: string;
   status: string;
+  alertCount: number;
 };
 
-export function TopHeader({ siteName, dateLabel, status }: TopHeaderProps) {
+export function TopHeader({
+  siteName,
+  siteMeta,
+  dateLabel,
+  weatherLabel,
+  status,
+  alertCount
+}: TopHeaderProps) {
   return (
     <header className="sticky top-0 z-20 border-b border-border/70 bg-white/92 px-5 pb-4 pt-5 backdrop-blur">
       <div className="flex items-start justify-between gap-3">
@@ -15,9 +25,17 @@ export function TopHeader({ siteName, dateLabel, status }: TopHeaderProps) {
           <h1 className="mt-1 text-[22px] font-bold tracking-[-0.03em] text-foreground">
             {siteName}
           </h1>
+          <div className="mt-2 flex items-center gap-1 text-[12px] text-slate">
+            <MapPin className="h-3.5 w-3.5 text-primary" />
+            <span className="truncate">{siteMeta}</span>
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-[#f5f7f6] px-3 py-1 text-[12px] font-medium text-slate">
               {dateLabel}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#eef6f1] px-3 py-1 text-[12px] font-medium text-[#426153]">
+              <CloudSun className="h-3.5 w-3.5 text-primary" />
+              {weatherLabel}
             </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-[12px] font-semibold text-[#067647]">
               <CircleDot className="h-3.5 w-3.5" />
@@ -32,7 +50,9 @@ export function TopHeader({ siteName, dateLabel, status }: TopHeaderProps) {
           type="button"
         >
           <Bell className="h-[18px] w-[18px]" />
-          <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-primary" />
+          <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white">
+            {alertCount}
+          </span>
           {/* TODO: notification integration */}
         </button>
       </div>

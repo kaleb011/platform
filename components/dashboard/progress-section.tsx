@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -22,7 +22,7 @@ const progressToneMap: Record<ProgressStatus, string> = {
 
 export function ProgressSection({ items }: { items: ProgressItem[] }) {
   return (
-    <Card>
+    <Card className="section-enter">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[17px] font-bold tracking-[-0.03em] text-foreground">
@@ -45,7 +45,9 @@ export function ProgressSection({ items }: { items: ProgressItem[] }) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[15px] font-bold text-foreground">{item.name}</p>
-                <p className="mt-1 text-[12px] text-slate">{item.team}</p>
+                <p className="mt-1 text-[12px] text-slate">
+                  {item.team} · {item.area}
+                </p>
               </div>
               <Badge tone={toneMap[item.status]}>{item.status}</Badge>
             </div>
@@ -59,10 +61,15 @@ export function ProgressSection({ items }: { items: ProgressItem[] }) {
               value={item.progress}
               indicatorClassName={progressToneMap[item.status]}
             />
-            <p className="mt-3 text-[12px] leading-5 text-slate">{item.note}</p>
+            <div className="mt-3 flex items-start justify-between gap-2">
+              <p className="text-[12px] leading-5 text-slate">{item.note}</p>
+              <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-slate/70" />
+            </div>
           </div>
         ))}
       </div>
+
+      {/* TODO: connect progress detail drawer or page */}
     </Card>
   );
 }

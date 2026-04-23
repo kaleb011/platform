@@ -18,7 +18,7 @@ export function SummaryCards({ items }: { items: DashboardSummaryStat[] }) {
         const Icon = iconMap[item.icon];
 
         return (
-          <Card key={item.id} className="p-0">
+          <Card key={item.id} className="section-enter overflow-hidden p-0">
             <div className="rounded-[24px] bg-white p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-primary/10 text-primary">
@@ -30,6 +30,7 @@ export function SummaryCards({ items }: { items: DashboardSummaryStat[] }) {
               <p className="mt-1 text-[25px] font-bold tracking-[-0.03em] text-foreground">
                 {item.value}
               </p>
+              <p className="mt-2 text-[12px] leading-5 text-slate">{item.footnote}</p>
             </div>
           </Card>
         );

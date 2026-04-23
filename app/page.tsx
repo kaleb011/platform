@@ -1,3 +1,6 @@
+import { CloudRain, RadioTower, Sparkles } from "lucide-react";
+
+import { HeroBriefing } from "@/components/dashboard/hero-briefing";
 import { MaterialSummary } from "@/components/dashboard/material-summary";
 import { ProgressSection } from "@/components/dashboard/progress-section";
 import { QuickActions } from "@/components/dashboard/quick-actions";
@@ -8,6 +11,7 @@ import { TopHeader } from "@/components/layout/top-header";
 import { Card } from "@/components/ui/card";
 import {
   dashboardHeader,
+  dashboardHero,
   dashboardSummaryStats,
   materialPriceItems,
   progressItems,
@@ -18,47 +22,73 @@ import {
 
 export default function HomePage() {
   return (
-    <div className="mx-auto min-h-screen max-w-[430px] bg-white shadow-soft">
-      <TopHeader
-        siteName={dashboardHeader.siteName}
-        dateLabel={dashboardHeader.dateLabel}
-        status={dashboardHeader.status}
-      />
-
-      <main className="app-safe-bottom space-y-4 px-4 pb-8 pt-4">
-        <Card className="bg-[linear-gradient(135deg,#0ca95a_0%,#03c75a_58%,#74dfa4_100%)] text-white">
-          <p className="text-[12px] font-medium text-white/80">오늘 현장 브리핑</p>
-          <p className="mt-2 text-[20px] font-bold tracking-[-0.03em] text-white">
-            공정과 안전, 자재 흐름을 한 화면에서 빠르게 확인하세요.
-          </p>
-          <p className="mt-3 text-[13px] leading-5 text-white/85">
-            오전 작업 인원과 주요 공종, 자재 단가 변동을 현장 관리자 시선에서 바로 볼 수 있게
-            정리했습니다.
-          </p>
-        </Card>
-
-        <SummaryCards items={dashboardSummaryStats} />
-        <ProgressSection items={progressItems} />
-        <WorkSummary
-          items={workSummaryItems}
-          note={workSummaryMeta.note}
-          safetyStatus={workSummaryMeta.safetyStatus}
+    <div className="min-h-screen px-4 py-5">
+      <div className="phone-shell mx-auto min-h-[100dvh] max-w-[430px] rounded-[36px]">
+        <TopHeader
+          siteName={dashboardHeader.siteName}
+          siteMeta={dashboardHeader.siteMeta}
+          dateLabel={dashboardHeader.dateLabel}
+          weatherLabel={dashboardHeader.weatherLabel}
+          status={dashboardHeader.status}
+          alertCount={dashboardHeader.alertCount}
         />
-        <MaterialSummary items={materialPriceItems} />
-        <QuickActions items={quickActionItems} />
 
-        <Card className="bg-[#f8fbf9]">
-          <p className="text-sm font-semibold text-foreground">연동 준비 메모</p>
-          <p className="mt-2 text-[12px] leading-5 text-slate">
-            현재는 mock data 기반 UI입니다. 추후 스프레드시트, Supabase, 알림 기능과 연결하기
-            쉽도록 타입과 데이터를 분리해두었습니다.
-          </p>
-          {/* TODO: spreadsheet import hook */}
-          {/* TODO: supabase query hook */}
-        </Card>
-      </main>
+        <main className="app-safe-bottom relative space-y-4 px-4 pb-8 pt-4">
+          <HeroBriefing
+            title={dashboardHero.title}
+            headline={dashboardHero.headline}
+            description={dashboardHero.description}
+            chips={dashboardHero.chips}
+          />
 
-      <BottomTabBar />
+          <div className="grid grid-cols-3 gap-3 section-enter">
+            <Card className="col-span-2 bg-[#f8fbf8] p-4">
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-[#067647]">
+                <RadioTower className="h-4 w-4" />
+                오전 브리핑 포인트
+              </div>
+              <p className="mt-2 text-[15px] font-semibold leading-6 text-foreground">
+                외부 양중은 점심 전 우선 처리, 오후에는 실내 중심으로 전환 권장
+              </p>
+            </Card>
+            <Card className="bg-[#f4faf5] p-4">
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-[#067647]">
+                <CloudRain className="h-4 w-4" />
+                기상
+              </div>
+              <p className="mt-2 text-[15px] font-bold text-foreground">13시 이후 비</p>
+              <p className="mt-1 text-[11px] text-slate">타설 일정 재확인</p>
+            </Card>
+          </div>
+
+          <SummaryCards items={dashboardSummaryStats} />
+          <ProgressSection items={progressItems} />
+          <WorkSummary
+            items={workSummaryItems}
+            safetyStatus={workSummaryMeta.safetyStatus}
+            safetyNote={workSummaryMeta.safetyNote}
+            issueSummary={workSummaryMeta.issueSummary}
+          />
+          <MaterialSummary items={materialPriceItems} />
+          <QuickActions items={quickActionItems} />
+
+          <Card className="section-enter bg-[#f8fbf9]">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Sparkles className="h-4 w-4 text-primary" />
+              다음 연결 준비
+            </div>
+            <p className="mt-2 text-[12px] leading-5 text-slate">
+              지금 단계는 홈 대시보드 완성도에 집중한 목업입니다. 하단 탭은 이동 가능한 구조처럼
+              보이도록 잡아두었고, 이후 공정 상세, 작업일보, 적산, 자재 화면을 같은 톤으로 확장할 수
+              있게 분리해두었습니다.
+            </p>
+            {/* TODO: replace mock dashboard payload with real API hooks */}
+            {/* TODO: connect tab navigation when secondary screens are ready */}
+          </Card>
+        </main>
+
+        <BottomTabBar />
+      </div>
     </div>
   );
 }

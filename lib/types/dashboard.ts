@@ -10,8 +10,18 @@ export type QuickActionIcon = "bar-chart" | "clipboard-pen" | "calculator" | "pa
 
 export interface DashboardHeaderInfo {
   siteName: string;
+  siteMeta: string;
   dateLabel: string;
+  weatherLabel: string;
   status: string;
+  alertCount: number;
+}
+
+export interface DashboardHeroInfo {
+  title: string;
+  headline: string;
+  description: string;
+  chips: string[];
 }
 
 export interface DashboardSummaryStat {
@@ -19,6 +29,7 @@ export interface DashboardSummaryStat {
   label: string;
   value: string;
   description: string;
+  footnote: string;
   icon: SummaryIcon;
   tone: Exclude<BadgeTone, "gray">;
 }
@@ -29,12 +40,14 @@ export interface ProgressItem {
   progress: number;
   status: ProgressStatus;
   team: string;
+  area: string;
   note: string;
 }
 
 export interface WorkSummaryItem {
   id: string;
-  text: string;
+  title: string;
+  detail: string;
 }
 
 export interface MaterialPriceItem {
@@ -43,6 +56,7 @@ export interface MaterialPriceItem {
   currentPrice: string;
   changeRate: string;
   direction: MaterialDirection;
+  note: string;
 }
 
 export interface QuickActionItem {
@@ -50,4 +64,11 @@ export interface QuickActionItem {
   label: string;
   icon: QuickActionIcon;
   description: string;
+  hint: string;
+}
+
+export interface WorkSummaryMeta {
+  safetyStatus: string;
+  safetyNote: string;
+  issueSummary: string;
 }

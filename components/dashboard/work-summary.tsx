@@ -8,18 +8,20 @@ import type { WorkSummaryItem } from "@/lib/types/dashboard";
 type WorkSummaryProps = {
   items: WorkSummaryItem[];
   safetyStatus: string;
-  note: string;
+  safetyNote: string;
+  issueSummary: string;
 };
 
 export function WorkSummary({
   items,
   safetyStatus,
-  note
+  safetyNote,
+  issueSummary
 }: WorkSummaryProps) {
   const safetyTone = safetyStatus === "안전 점검 완료" ? "green" : "amber";
 
   return (
-    <Card>
+    <Card className="section-enter">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[17px] font-bold tracking-[-0.03em] text-foreground">
@@ -41,20 +43,30 @@ export function WorkSummary({
             <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-primary">
               <CheckCircle2 className="h-4 w-4" />
             </div>
-            <p className="text-[13px] font-medium leading-5 text-foreground">{item.text}</p>
+            <div>
+              <p className="text-[13px] font-semibold leading-5 text-foreground">{item.title}</p>
+              <p className="mt-1 text-[12px] leading-5 text-slate">{item.detail}</p>
+            </div>
           </div>
         ))}
       </div>
 
       <Separator className="my-4" />
 
-      <div className="rounded-[20px] border border-[#f4d8a8] bg-[#fff8ea] p-4">
+      <div className="rounded-[20px] border border-[#d7eadf] bg-[#f3fbf6] p-4">
         <div className="flex items-center gap-2">
-          <ShieldAlert className="h-4 w-4 text-[#b54708]" />
-          <p className="text-sm font-semibold text-[#7a4a05]">특이사항</p>
+          <ShieldAlert className="h-4 w-4 text-[#067647]" />
+          <p className="text-sm font-semibold text-[#14532d]">안전 체크</p>
         </div>
-        <p className="mt-2 text-[13px] leading-5 text-[#7a4a05]">{note}</p>
+        <p className="mt-2 text-[13px] leading-5 text-[#14532d]">{safetyNote}</p>
       </div>
+
+      <div className="mt-3 rounded-[20px] border border-[#f4d8a8] bg-[#fff8ea] p-4">
+        <p className="text-sm font-semibold text-[#7a4a05]">특이사항</p>
+        <p className="mt-2 text-[13px] leading-5 text-[#7a4a05]">{issueSummary}</p>
+      </div>
+
+      {/* TODO: connect today work log and safety checklist source */}
     </Card>
   );
 }
