@@ -18,7 +18,7 @@ export function WorkSummary({
   safetyNote,
   issueSummary
 }: WorkSummaryProps) {
-  const safetyTone = safetyStatus === "안전 점검 완료" ? "green" : "amber";
+  const safetyTone = safetyStatus === "안전 장구 착용 완료" ? "green" : "amber";
 
   return (
     <Card className="section-enter">
@@ -28,7 +28,7 @@ export function WorkSummary({
             오늘 작업 요약
           </p>
           <p className="mt-1 text-[12px] leading-5 text-slate">
-            아침 브리핑과 점심 재확인에 모두 쓸 수 있는 정보만 담았습니다.
+            오전 브리핑과 작업 확인 내용을 한 번에 볼 수 있도록 정리했습니다.
           </p>
         </div>
         <Badge tone={safetyTone}>{safetyStatus}</Badge>

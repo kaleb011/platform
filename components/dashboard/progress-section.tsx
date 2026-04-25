@@ -15,9 +15,9 @@ const toneMap: Record<ProgressStatus, "green" | "amber" | "blue" | "red"> = {
 
 const progressToneMap: Record<ProgressStatus, string> = {
   정상: "bg-primary",
-  지연: "bg-warning",
+  지연: "bg-[#f59e0b]",
   완료: "bg-[#3b82f6]",
-  위험: "bg-danger"
+  위험: "bg-[#ef4444]"
 };
 
 export function ProgressSection({ items }: { items: ProgressItem[] }) {
@@ -29,7 +29,7 @@ export function ProgressSection({ items }: { items: ProgressItem[] }) {
             주요 공정 진행 현황
           </p>
           <p className="mt-1 text-[12px] leading-5 text-slate">
-            오늘 현장에서 바로 확인할 공종 중심으로 정리했습니다.
+            오늘 현장에서 바로 확인할 공종 중심으로 우선순위를 정리했습니다.
           </p>
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">

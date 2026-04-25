@@ -29,7 +29,7 @@ export function MaterialSummary({ items }: { items: MaterialPriceItem[] }) {
             자재 가격 요약
           </p>
           <p className="mt-1 text-[12px] leading-5 text-slate">
-            금융 화면처럼 보이지 않도록 현장 매입 문맥 중심으로 정리했습니다.
+            현장 발주 판단에 필요한 핵심 자재 단가 흐름만 먼저 정리했습니다.
           </p>
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">

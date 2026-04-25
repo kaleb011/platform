@@ -23,7 +23,7 @@ export function QuickActions({ items }: { items: QuickActionItem[] }) {
       <div>
         <p className="text-[17px] font-bold tracking-[-0.03em] text-foreground">빠른 실행</p>
         <p className="mt-1 text-[12px] leading-5 text-slate">
-          자주 쓰는 기능을 홈에서 바로 진입하는 MVP 흐름입니다.
+          자주 여는 기능을 홈 화면에서 바로 확인할 수 있도록 배치했습니다.
         </p>
       </div>
 

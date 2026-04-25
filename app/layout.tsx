@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "현장관리 플랫폼 모바일 대시보드",
-  description: "소규모 건설 현장 관리자를 위한 모바일 중심 홈 대시보드 UI 목업"
+  title: "현장관리 플랫폼",
+  description: "작업일보, 적산, 공정, 자재 관리를 위한 모바일 현장관리 프로토타입"
 };
 
 export default function RootLayout({

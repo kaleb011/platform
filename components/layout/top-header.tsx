@@ -21,7 +21,7 @@ export function TopHeader({
     <header className="sticky top-0 z-20 border-b border-border/70 bg-white/92 px-5 pb-4 pt-5 backdrop-blur">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[12px] font-medium text-slate">현장 홈 대시보드</p>
+          <p className="text-[12px] font-medium text-slate">현장 관리 대시보드</p>
           <h1 className="mt-1 text-[22px] font-bold tracking-[-0.03em] text-foreground">
             {siteName}
           </h1>

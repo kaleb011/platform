@@ -27,7 +27,7 @@ export function HeroBriefing({
             </div>
             <div className="inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1 text-[11px] font-medium text-white/90">
               <ShieldCheck className="h-3.5 w-3.5" />
-              현장 우선 확인
+              안전 우선 확인
             </div>
           </div>
 
@@ -51,7 +51,7 @@ export function HeroBriefing({
             <div>
               <p className="text-[11px] font-medium text-white/76">현장 메모</p>
               <p className="mt-1 text-[13px] font-semibold text-white">
-                오전 검측 전 작업일보 누락 2건 확인 필요
+                오전 검측 완료 후 적산 후보 검수 2건 확인 필요
               </p>
             </div>
             <ArrowRight className="h-4 w-4 shrink-0 text-white/80" />
