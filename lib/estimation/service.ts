@@ -75,7 +75,7 @@ export function deriveEstimateItems(args: {
     });
 
     return items;
-  });
+  }, []);
 }
 
 export function buildScheduleCategorySummaries(scheduleItems: ScheduleForecastItemRecord[]) {
