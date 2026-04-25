@@ -28,6 +28,7 @@ import {
 } from "@/lib/estimation/service";
 import type {
   DrawingFileRecord,
+  EstimateItemRecord,
   EstimationTabKey,
   ReviewStatus
 } from "@/lib/estimation/types";
@@ -65,7 +66,7 @@ export function EstimationDashboard() {
     };
   }, []);
 
-  const estimateItems = deriveEstimateItems({
+  const estimateItems: EstimateItemRecord[] = deriveEstimateItems({
     candidates,
     matches,
     standardItems: seed.standardItems

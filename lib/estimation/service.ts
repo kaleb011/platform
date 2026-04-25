@@ -33,7 +33,7 @@ export function deriveEstimateItems(args: {
   candidates: DrawingExtractionCandidateRecord[];
   matches: EstimateItemMatchRecord[];
   standardItems: StandardItemRecord[];
-}) {
+}): EstimateItemRecord[] {
   const { candidates, matches, standardItems } = args;
 
   const acceptedMatches = matches.filter((match) => match.reviewStatus === "accepted");
