@@ -24,13 +24,17 @@ type PdfLoadingTaskLike = {
 
 type PdfJsDocumentSource = {
   data: Uint8Array;
-  disableWorker?: boolean;
 };
 
 type PdfJsModuleLike = {
+  GlobalWorkerOptions?: {
+    workerSrc?: string;
+  };
   getDocument: (source: PdfJsDocumentSource) => PdfLoadingTaskLike;
 };
 
+const PDFJS_VERSION = "4.10.38";
+const PDFJS_WORKER_SRC = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.mjs`;
 const FAILURE_MESSAGE =
   "PDF 텍스트 추출에 실패했습니다. 다음 단계에서 이미지 기반 분석이 필요합니다.";
 const SUCCESS_MESSAGE =
@@ -90,14 +94,22 @@ async function loadPdfDocument(
 ): Promise<{ pdf: PdfDocumentProxyLike; debugSteps: string[] }> {
   const debugSteps: string[] = [];
 
-  // TODO: Worker disabled for Vercel build stability. Large PDFs may parse slower until
-  // a module-safe worker delivery strategy is added.
-  console.debug("[estimate/pdf] getDocument start", { mode: "disableWorker" });
-  const loadingTask = pdfjs.getDocument({ data: data.slice(), disableWorker: true });
+  if (pdfjs.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
+    debugSteps.push(`workerSrc configured: ${PDFJS_WORKER_SRC}`);
+    console.debug("[estimate/pdf] workerSrc configured", PDFJS_WORKER_SRC);
+  } else {
+    const debugMessage = "GlobalWorkerOptions is unavailable on pdfjs module";
+    debugSteps.push(debugMessage);
+    console.debug("[estimate/pdf]", debugMessage);
+  }
+
+  console.debug("[estimate/pdf] getDocument start", { mode: "cdnWorker" });
+  const loadingTask = pdfjs.getDocument({ data: data.slice() });
   const pdf = await loadingTask.promise;
-  debugSteps.push(`getDocument success with disableWorker, numPages=${pdf.numPages}`);
+  debugSteps.push(`getDocument success with cdnWorker, numPages=${pdf.numPages}`);
   console.debug("[estimate/pdf] getDocument success", {
-    mode: "disableWorker",
+    mode: "cdnWorker",
     numPages: pdf.numPages
   });
 
