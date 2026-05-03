@@ -1,5 +1,6 @@
 import type {
   DrawingExtractionCandidateRecord,
+  ExtractionCandidateGroup,
   PdfTextExtractionResult
 } from "@/lib/estimation/types";
 
@@ -110,6 +111,7 @@ function createDraft(args: {
   scale?: string | null;
   quantity?: number | null;
   unit?: string | null;
+  candidateGroup?: ExtractionCandidateGroup;
 }): CandidateDraft {
   const extractedText = truncateCandidateValue(args.extractedText);
 
@@ -127,12 +129,21 @@ function createDraft(args: {
       : extractedText,
     sourceLabel: "uploaded_pdf",
     extractionMethod: "pdf_text_rule",
+    candidateGroup: args.candidateGroup ?? getCandidateGroupFromType(args.extractedType),
     drawingNo: args.drawingNo ?? null,
     drawingTitle: args.drawingTitle ?? null,
     scale: args.scale ?? null,
     quantity: args.quantity ?? null,
     unit: args.unit ?? null
   };
+}
+
+function getCandidateGroupFromType(extractedType: string): ExtractionCandidateGroup {
+  if (["drawing_no", "drawing_title", "scale", "floor", "symbol"].includes(extractedType)) {
+    return "drawing_metadata";
+  }
+
+  return "estimate_candidate";
 }
 
 function getTextWindow(text: string, index: number, length: number, radius = 55): string {
@@ -543,6 +554,8 @@ export function createCandidatesFromPdfText(
       sourceFileName: result.fileName,
       sourceTextSnippet: candidate.sourceTextSnippet ?? candidate.extractedText ?? "",
       sourceLabel: "uploaded_pdf",
-      extractionMethod: "pdf_text_rule"
+      extractionMethod: "pdf_text_rule",
+      candidateGroup:
+        candidate.candidateGroup ?? getCandidateGroupFromType(candidate.extractedType ?? "note")
     }));
 }

@@ -16,6 +16,13 @@ export {
   extractDrawingMetadataCandidates,
   extractWorkItemCandidates
 } from "@/lib/estimation/pdf-extraction-rules";
+export {
+  filterExtractionCandidates,
+  getApprovedEstimateCandidates,
+  getCandidateDisplayTitle,
+  getCandidateGroup,
+  getCandidateReviewSummary
+} from "@/lib/estimation/candidate-review";
 import { rankStandardMatches } from "@/lib/estimation/standard-match";
 
 export function formatFileSize(bytes: number): string {

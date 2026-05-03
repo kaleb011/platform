@@ -20,6 +20,23 @@ export type PdfTextExtractionStatus = "success" | "empty" | "failed";
 
 export type PdfTextExtractionResultStatus = "success" | "partial" | "failed";
 
+export type ExtractionCandidateGroup = "drawing_metadata" | "estimate_candidate";
+
+export type ExtractionCandidateFilter =
+  | "all"
+  | "drawing_metadata"
+  | "estimate_candidate"
+  | "drawing_no"
+  | "drawing_title"
+  | "scale"
+  | "material"
+  | "work_item"
+  | "uploaded_pdf"
+  | "sample"
+  | "accepted"
+  | "rejected"
+  | "needs_standard_match";
+
 export type DrawingDataStatus = "empty" | "exists";
 
 export type EstimateDataStatus = "none" | "sample_ready" | "ready";
@@ -104,6 +121,7 @@ export interface DrawingExtractionCandidateRecord {
   sourceTextSnippet?: string | null;
   sourceLabel?: "sample" | "uploaded_pdf";
   extractionMethod?: string | null;
+  candidateGroup?: ExtractionCandidateGroup;
 }
 
 export interface StandardDocumentRecord {
