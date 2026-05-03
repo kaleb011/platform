@@ -88,7 +88,7 @@ function CandidateReviewCard({
   const title = getCandidateDisplayTitle(candidate);
 
   return (
-    <div className="rounded-[20px] border border-border bg-white px-4 py-4">
+    <div className="rounded-[20px] border border-border bg-white px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="line-clamp-2 text-[15px] font-bold leading-6 text-foreground">{title}</p>
@@ -106,7 +106,7 @@ function CandidateReviewCard({
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 text-[12px] leading-5 text-slate sm:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-2 text-[12px] leading-5 text-slate md:grid-cols-2">
         <p>
           <span className="font-semibold text-foreground">정규화: </span>
           <span className="line-clamp-2">{candidate.normalizedValue ?? "-"}</span>
@@ -141,7 +141,7 @@ function CandidateReviewCard({
 
       <div className="mt-4 flex flex-wrap gap-2">
         <Button
-          className="min-h-[36px] rounded-[14px] px-3 text-[12px]"
+          className="min-h-[38px] rounded-[14px] px-3 text-[12px]"
           onClick={() => onChangeStatus(candidate.id, "accepted")}
           variant="secondary"
         >
@@ -149,7 +149,7 @@ function CandidateReviewCard({
           승인
         </Button>
         <Button
-          className="min-h-[36px] rounded-[14px] px-3 text-[12px]"
+          className="min-h-[38px] rounded-[14px] px-3 text-[12px]"
           onClick={() => onChangeStatus(candidate.id, "rejected")}
           variant="ghost"
         >
@@ -157,7 +157,7 @@ function CandidateReviewCard({
           제외
         </Button>
         <Button
-          className="min-h-[36px] rounded-[14px] px-3 text-[12px]"
+          className="min-h-[38px] rounded-[14px] px-3 text-[12px]"
           onClick={() => onChangeStatus(candidate.id, "pending")}
           variant="ghost"
         >
@@ -165,7 +165,7 @@ function CandidateReviewCard({
           보류
         </Button>
         <Button
-          className="min-h-[36px] rounded-[14px] px-3 text-[12px]"
+          className="min-h-[38px] rounded-[14px] px-3 text-[12px]"
           onClick={() => onChangeStatus(candidate.id, "needs_standard_match")}
           variant="ghost"
         >
@@ -238,7 +238,7 @@ export function DrawingExtractionTable({
         })}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {filteredCandidates.map((candidate) => (
           <CandidateReviewCard
             key={candidate.id}

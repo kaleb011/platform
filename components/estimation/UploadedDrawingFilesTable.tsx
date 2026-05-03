@@ -42,7 +42,7 @@ function formatUploadedAt(value: string): string {
 
 function getNextAction(file: DrawingFileRecord): string {
   if (file.fileType === "pdf") {
-    return "PDF -> PNG 변환 예정";
+    return "PDF → PNG 변환 및 도면 이미지 분석 예정";
   }
 
   if (file.fileType === "png" || file.fileType === "jpg") {
@@ -54,6 +54,14 @@ function getNextAction(file: DrawingFileRecord): string {
   }
 
   return "지원 형식 확인 필요";
+}
+
+function getUserMessage(file: DrawingFileRecord): string | null {
+  if (file.fileType === "pdf" && typeof file.pageCount === "number" && file.pageCount > 0) {
+    return `${file.pageCount}페이지 확인 완료. PDF 텍스트 후보를 생성했습니다. 이미지 기반 도면 요소 분석은 다음 단계에서 진행됩니다.`;
+  }
+
+  return file.message ?? null;
 }
 
 function getPageCountLabel(file: DrawingFileRecord): string {
@@ -101,15 +109,16 @@ export function UploadedDrawingFilesTable({ drawingFiles }: UploadedDrawingFiles
                 <tr key={file.id} className="border-b border-border/70 align-top">
                   <td className="max-w-[220px] px-2 py-4 text-[13px] font-semibold text-foreground">
                     <span className="block truncate">{file.fileName}</span>
-                    {file.message ? (
+                    {getUserMessage(file) ? (
                       <span className="mt-1 block text-[11px] font-normal leading-4 text-slate">
-                        {file.message}
+                        {getUserMessage(file)}
                       </span>
                     ) : null}
                     {file.debugMessage ? (
-                      <span className="mt-1 block text-[11px] font-normal leading-4 text-[#7a4a05]">
-                        Debug: {file.debugMessage}
-                      </span>
+                      <details className="mt-2 text-[11px] font-normal leading-4 text-[#7a4a05]">
+                        <summary className="cursor-pointer font-semibold">상세 로그 보기</summary>
+                        <p className="mt-1 break-words">Debug: {file.debugMessage}</p>
+                      </details>
                     ) : null}
                   </td>
                   <td className="px-2 py-4 text-[13px] uppercase text-foreground">

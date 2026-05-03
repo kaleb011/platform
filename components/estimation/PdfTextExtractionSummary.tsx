@@ -66,12 +66,31 @@ export function PdfTextExtractionSummary({ results }: PdfTextExtractionSummaryPr
               open={result.status !== "success"}
             >
               <summary className="cursor-pointer text-[13px] font-semibold text-foreground">
-                {result.fileName} · {result.pageCount} page · {result.message ?? result.status}
+                {result.fileName} · {result.pageCount} page ·{" "}
+                {result.status === "failed"
+                  ? "일부 페이지에서 텍스트를 읽지 못했습니다."
+                  : `${result.pageCount}페이지 중 ${
+                      result.pages.filter((page) => page.extractionStatus === "success").length
+                    }페이지에서 텍스트를 읽었습니다.`}
               </summary>
+              {result.pages.some((page) => page.extractionStatus === "failed") ? (
+                <p className="mt-3 rounded-[14px] bg-[#fff8ea] px-3 py-2 text-[12px] leading-5 text-[#7a4a05]">
+                  일부 페이지에서 텍스트를 읽지 못했습니다. 이미지 기반 분석이 필요할 수 있습니다.
+                </p>
+              ) : (
+                <p className="mt-3 rounded-[14px] bg-[#f8fbf9] px-3 py-2 text-[12px] leading-5 text-slate">
+                  PDF 텍스트가 추출되었습니다.
+                </p>
+              )}
               {result.debugMessage ? (
-                <div className="mt-3 rounded-[14px] bg-[#fff8ea] px-3 py-2 text-[11px] leading-5 text-[#7a4a05]">
-                  Debug: {result.debugMessage}
-                </div>
+                <details className="mt-3 rounded-[14px] bg-[#fff8ea] px-3 py-2 text-[11px] leading-5 text-[#7a4a05]">
+                  <summary className="cursor-pointer font-semibold">
+                    {result.pages.some((page) => page.extractionStatus === "failed")
+                      ? "상세 오류 보기"
+                      : "상세 로그 보기"}
+                  </summary>
+                  <p className="mt-1 break-words">Debug: {result.debugMessage}</p>
+                </details>
               ) : null}
               <div className="mt-3 space-y-2">
                 {result.pages.map((page) => (
