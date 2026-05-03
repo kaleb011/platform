@@ -127,6 +127,222 @@ export function createLocalDrawingUpload(file: File): DrawingFileRecord {
   return createDrawingFileRecordFromFile(file);
 }
 
+function findStandardItemById(
+  standardItems: StandardItemRecord[],
+  itemId: string
+): StandardItemRecord | undefined {
+  return standardItems.find((item) => item.id === itemId);
+}
+
+function pickStandardItemForCandidate(
+  candidate: DrawingExtractionCandidateRecord,
+  standardItems: StandardItemRecord[]
+): { standardItem: StandardItemRecord; confidence: number; reason: string } | null {
+  const value = [
+    candidate.normalizedValue,
+    candidate.extractedText,
+    candidate.sourceTextSnippet,
+    candidate.sourceNote
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const rules: Array<{
+    standardItemId: string;
+    confidence: number;
+    keywords: string[];
+    reason: string;
+  }> = [
+    {
+      standardItemId: "std-wall",
+      confidence: 0.72,
+      keywords: ["석고보드", "벽체", "wall"],
+      reason: "PDF 승인 후보 기반 / 벽체·석고보드 키워드 매칭"
+    },
+    {
+      standardItemId: "std-door",
+      confidence: 0.72,
+      keywords: ["방화문", "문", "door"],
+      reason: "PDF 승인 후보 기반 / 문·방화문 키워드 매칭"
+    },
+    {
+      standardItemId: "std-rc-beam",
+      confidence: 0.7,
+      keywords: ["철근", "콘크리트", "슬라브", "보", "기둥", "rc"],
+      reason: "PDF 승인 후보 기반 / 철근콘크리트 구조 키워드 매칭"
+    },
+    {
+      standardItemId: "std-waterproof",
+      confidence: 0.74,
+      keywords: ["방수", "우레탄", "waterproof"],
+      reason: "PDF 승인 후보 기반 / 방수 공종 키워드 매칭"
+    },
+    {
+      standardItemId: "std-steel",
+      confidence: 0.68,
+      keywords: ["철골", "steel"],
+      reason: "PDF 승인 후보 기반 / 철골 키워드 매칭"
+    },
+    {
+      standardItemId: "std-demolition",
+      confidence: 0.68,
+      keywords: ["철거", "demolition"],
+      reason: "PDF 승인 후보 기반 / 철거 키워드 매칭"
+    },
+    {
+      standardItemId: "std-paving",
+      confidence: 0.66,
+      keywords: [
+        "아스콘",
+        "포장",
+        "경계석",
+        "우수관",
+        "오수관",
+        "pvc",
+        "맨홀",
+        "집수정",
+        "빗물받이"
+      ],
+      reason: "PDF 승인 후보 기반 / 포장·배수 계열 키워드 매칭"
+    }
+  ];
+
+  const normalizedValue = value.toLowerCase();
+  const matchedRule = rules.find((rule) =>
+    rule.keywords.some((keyword) => normalizedValue.includes(keyword.toLowerCase()))
+  );
+
+  if (matchedRule) {
+    const standardItem = findStandardItemById(standardItems, matchedRule.standardItemId);
+
+    if (standardItem) {
+      return {
+        standardItem,
+        confidence: matchedRule.confidence,
+        reason: matchedRule.reason
+      };
+    }
+  }
+
+  const fallbackItem = standardItems[0];
+
+  if (!fallbackItem) {
+    return null;
+  }
+
+  return {
+    standardItem: fallbackItem,
+    confidence: 0.35,
+    reason: "PDF 승인 후보 기반 / 키워드 매칭 필요"
+  };
+}
+
+export function createStandardMatchesFromApprovedCandidates(
+  approvedCandidates: DrawingExtractionCandidateRecord[],
+  standardItems: StandardItemRecord[]
+): EstimateItemMatchRecord[] {
+  return approvedCandidates.reduce<EstimateItemMatchRecord[]>((matches, candidate) => {
+    const picked = pickStandardItemForCandidate(candidate, standardItems);
+
+    if (!picked) {
+      return matches;
+    }
+
+    matches.push({
+      id: `uploaded-match-${candidate.id}-${picked.standardItem.id}`,
+      projectId: candidate.drawingFileId.startsWith("upload-") ? undefined : null,
+      drawingExtractionId: candidate.id,
+      standardItemId: picked.standardItem.id,
+      matchReason: picked.reason,
+      confidence: picked.confidence,
+      reviewStatus: picked.confidence >= 0.6 ? "pending" : "needs_standard_match",
+      sourceCandidateId: candidate.id,
+      sourceFileName: candidate.sourceFileName ?? null,
+      sourcePage: candidate.sourcePage ?? null,
+      matchSource: "uploaded_pdf",
+      standardMatchStatus: "pending"
+    });
+
+    return matches;
+  }, []);
+}
+
+export function createEstimateItemFromMatch(
+  match: EstimateItemMatchRecord,
+  candidate: DrawingExtractionCandidateRecord,
+  standardItem: StandardItemRecord
+): EstimateItemRecord {
+  const quantity = candidate.quantity ?? 1;
+  const quantityReviewRequired = candidate.quantity == null;
+  const matchSource = match.matchSource ?? candidate.sourceLabel ?? "sample";
+
+  return {
+    id: `estimate-${candidate.id}-${standardItem.id}`,
+    projectId: match.projectId,
+    drawingFileId: candidate.drawingFileId,
+    drawingPageId: candidate.drawingPageId,
+    standardItemId: standardItem.id,
+    workCategory: standardItem.workCategory,
+    itemName: candidate.normalizedValue ?? standardItem.itemName,
+    specification:
+      candidate.extractedText === candidate.normalizedValue
+        ? standardItem.description ?? standardItem.section ?? ""
+        : candidate.extractedText,
+    quantity,
+    unit: candidate.unit ?? standardItem.unit ?? "식",
+    calculationBasis:
+      candidate.sourceNote ??
+      candidate.sourceTextSnippet ??
+      standardItem.measurementRule ??
+      "PDF 승인 후보 기반, 수량 검토 필요",
+    sourceNote: match.matchReason ?? "",
+    reviewStatus: match.reviewStatus,
+    standardItemName: standardItem.itemName,
+    drawingNo: candidate.drawingNo ?? "",
+    drawingTitle: candidate.drawingTitle ?? "",
+    remark:
+      matchSource === "uploaded_pdf"
+        ? "PDF 승인 후보 기반 / 수량 검토 필요"
+        : candidate.reviewStatus === "edited"
+          ? "사용자 수정 후 승인"
+          : "샘플 데이터 기반 승인",
+    sourceCandidateId: candidate.id,
+    sourceFileName: candidate.sourceFileName ?? null,
+    sourcePage: candidate.sourcePage ?? null,
+    quantityReviewRequired,
+    matchSource,
+    standardCode: standardItem.itemCode ?? null
+  };
+}
+
+export function isEstimateItemDuplicate(
+  existingItems: EstimateItemRecord[],
+  newItem: EstimateItemRecord
+): boolean {
+  return existingItems.some((item) => {
+    if (item.sourceCandidateId && item.sourceCandidateId === newItem.sourceCandidateId) {
+      return true;
+    }
+
+    return (
+      item.itemName === newItem.itemName &&
+      item.specification === newItem.specification &&
+      item.sourcePage === newItem.sourcePage
+    );
+  });
+}
+
+export function mergeEstimateItems(
+  existingItems: EstimateItemRecord[],
+  newItem: EstimateItemRecord
+): EstimateItemRecord[] {
+  if (isEstimateItemDuplicate(existingItems, newItem)) {
+    return existingItems;
+  }
+
+  return [...existingItems, newItem];
+}
+
 export function deriveEstimateItems(args: {
   candidates: DrawingExtractionCandidateRecord[];
   matches: EstimateItemMatchRecord[];
@@ -144,32 +360,7 @@ export function deriveEstimateItems(args: {
       return items;
     }
 
-    items.push({
-      id: `estimate-${candidate.id}-${standardItem.id}`,
-      drawingFileId: candidate.drawingFileId,
-      drawingPageId: candidate.drawingPageId,
-      standardItemId: standardItem.id,
-      workCategory: standardItem.workCategory,
-      itemName: candidate.normalizedValue ?? standardItem.itemName,
-      specification:
-        candidate.extractedText === candidate.normalizedValue
-          ? standardItem.description ?? standardItem.section ?? ""
-          : candidate.extractedText,
-      quantity: candidate.quantity ?? 0,
-      unit: candidate.unit ?? standardItem.unit ?? "식",
-      calculationBasis:
-        candidate.sourceNote ??
-        standardItem.measurementRule ??
-        "도면 후보값을 기준으로 산출, 최종 검토 필요",
-      sourceNote: match.matchReason ?? "",
-      reviewStatus: candidate.reviewStatus,
-      standardItemName: standardItem.itemName,
-      drawingNo: candidate.drawingNo ?? "",
-      drawingTitle: candidate.drawingTitle ?? "",
-      remark: candidate.reviewStatus === "edited" ? "사용자 수정 후 승인" : "샘플 데이터 기반 승인"
-    });
-
-    return items;
+    return mergeEstimateItems(items, createEstimateItemFromMatch(match, candidate, standardItem));
   }, []);
 }
 

@@ -166,6 +166,11 @@ export interface EstimateItemMatchRecord {
   matchReason?: string | null;
   confidence?: number | null;
   reviewStatus: ReviewStatus;
+  sourceCandidateId?: string;
+  sourceFileName?: string | null;
+  sourcePage?: number | null;
+  matchSource?: "sample" | "uploaded_pdf" | "manual";
+  standardMatchStatus?: "pending" | "accepted" | "rejected";
 }
 
 export interface EstimateItemRecord {
@@ -186,6 +191,12 @@ export interface EstimateItemRecord {
   drawingNo?: string | null;
   drawingTitle?: string | null;
   remark?: string | null;
+  sourceCandidateId?: string;
+  sourceFileName?: string | null;
+  sourcePage?: number | null;
+  quantityReviewRequired?: boolean;
+  matchSource?: "sample" | "uploaded_pdf" | "manual";
+  standardCode?: string | null;
 }
 
 export interface ScheduleForecastItemRecord {

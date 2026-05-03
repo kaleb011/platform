@@ -33,8 +33,10 @@ import {
   buildScheduleCategorySummaries,
   createCandidatesFromPdfText,
   createDrawingFileRecordFromFile,
+  createStandardMatchesFromApprovedCandidates,
   deriveEstimateItems,
   extractPdfTextFromFile,
+  getApprovedEstimateCandidates,
   getDrawingFileType
 } from "@/lib/estimation/service";
 import type {
@@ -92,12 +94,54 @@ export function EstimationDashboard() {
 
     return activeProject.projectId === seed.projectId;
   });
+  const approvedEstimateCandidates = useMemo(
+    () => getApprovedEstimateCandidates(visibleCandidates),
+    [visibleCandidates]
+  );
+  const approvedEstimateCandidateIds = useMemo(
+    () => new Set(approvedEstimateCandidates.map((candidate) => candidate.id)),
+    [approvedEstimateCandidates]
+  );
+  const uploadedPdfCandidateMatches = useMemo(
+    () => createStandardMatchesFromApprovedCandidates(approvedEstimateCandidates, seed.standardItems),
+    [approvedEstimateCandidates, seed.standardItems]
+  );
+  const displayedMatches = useMemo(() => {
+    const visibleStoredMatches = matches.filter(
+      (match) =>
+        match.matchSource !== "uploaded_pdf" ||
+        approvedEstimateCandidateIds.has(match.drawingExtractionId)
+    );
+    const storedMatchIds = new Set(visibleStoredMatches.map((match) => match.id));
+
+    return [
+      ...visibleStoredMatches,
+      ...uploadedPdfCandidateMatches.filter((match) => !storedMatchIds.has(match.id))
+    ];
+  }, [approvedEstimateCandidateIds, matches, uploadedPdfCandidateMatches]);
 
   const estimateItems: EstimateItemRecord[] = deriveEstimateItems({
     candidates: visibleCandidates,
-    matches,
+    matches: displayedMatches,
     standardItems: seed.standardItems
   });
+  const uploadedPdfPendingMatchCount = displayedMatches.filter(
+    (match) =>
+      match.matchSource === "uploaded_pdf" &&
+      approvedEstimateCandidateIds.has(match.drawingExtractionId) &&
+      match.reviewStatus !== "accepted" &&
+      match.reviewStatus !== "edited" &&
+      match.reviewStatus !== "rejected"
+  ).length;
+  const uploadedPdfAcceptedMatchCount = displayedMatches.filter(
+    (match) =>
+      match.matchSource === "uploaded_pdf" &&
+      approvedEstimateCandidateIds.has(match.drawingExtractionId) &&
+      (match.reviewStatus === "accepted" || match.reviewStatus === "edited")
+  ).length;
+  const reflectedUploadedPdfEstimateCount = estimateItems.filter(
+    (item) => item.matchSource === "uploaded_pdf"
+  ).length;
   const scheduleSummaries = buildScheduleCategorySummaries(seed.scheduleForecastItems);
   const reviewNeededScheduleItems = seed.scheduleForecastItems.filter(
     (item) => item.status !== "linked"
@@ -198,18 +242,22 @@ export function EstimationDashboard() {
       )
     );
     updateRelatedMatches(candidateId, reviewStatus);
-    setNotice("검토 상태가 반영되었습니다. 승인된 항목은 적산내역 테이블에 즉시 반영됩니다.");
+    setNotice(
+      "검토 상태가 반영되었습니다. 승인된 적산 후보는 아래 표준품셈 후보 매칭 영역에서 검토할 수 있습니다."
+    );
   };
 
   const handleMatchStatusChange = (matchId: string, reviewStatus: ReviewStatus) => {
-    const match = matches.find((item) => item.id === matchId);
+    const match = displayedMatches.find((item) => item.id === matchId);
 
     if (!match) {
       return;
     }
 
-    setMatches((current) =>
-      current.map((item) => {
+    setMatches((current) => {
+      const baseMatches = current.some((item) => item.id === matchId) ? current : [...current, match];
+
+      return baseMatches.map((item) => {
         if (item.drawingExtractionId !== match.drawingExtractionId) {
           return item;
         }
@@ -217,13 +265,25 @@ export function EstimationDashboard() {
         if (reviewStatus === "accepted" || reviewStatus === "edited") {
           return {
             ...item,
-            reviewStatus: item.id === matchId ? "accepted" : "rejected"
+            reviewStatus: item.id === matchId ? "accepted" : "rejected",
+            standardMatchStatus: item.id === matchId ? "accepted" : "rejected"
           };
         }
 
-        return item.id === matchId ? { ...item, reviewStatus } : item;
-      })
-    );
+        return item.id === matchId
+          ? {
+              ...item,
+              reviewStatus,
+              standardMatchStatus:
+                reviewStatus === "rejected"
+                  ? "rejected"
+                  : reviewStatus === "pending" || reviewStatus === "needs_standard_match"
+                    ? "pending"
+                    : item.standardMatchStatus
+            }
+          : item;
+      });
+    });
 
     setCandidates((current) =>
       current.map((candidate) =>
@@ -495,9 +555,41 @@ export function EstimationDashboard() {
                 candidates={visibleCandidates}
                 onChangeStatus={handleCandidateStatusChange}
               />
+              <Card className="section-enter bg-[#f8fbf9]">
+                <SectionHeading
+                  title="승인 후보 연결 상태"
+                  description="승인된 적산 후보는 아래 표준품셈 후보 매칭 영역에서 한 번 더 검토한 뒤 승인된 적산내역에 반영됩니다."
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-[16px] bg-white px-3 py-3">
+                    <p className="text-[11px] font-medium text-slate">승인된 적산 후보</p>
+                    <p className="mt-1 text-[18px] font-bold text-foreground">
+                      {approvedEstimateCandidates.length}
+                    </p>
+                  </div>
+                  <div className="rounded-[16px] bg-white px-3 py-3">
+                    <p className="text-[11px] font-medium text-slate">표준품셈 매칭 대기</p>
+                    <p className="mt-1 text-[18px] font-bold text-foreground">
+                      {uploadedPdfPendingMatchCount}
+                    </p>
+                  </div>
+                  <div className="rounded-[16px] bg-white px-3 py-3">
+                    <p className="text-[11px] font-medium text-slate">표준품셈 매칭 승인</p>
+                    <p className="mt-1 text-[18px] font-bold text-foreground">
+                      {uploadedPdfAcceptedMatchCount}
+                    </p>
+                  </div>
+                  <div className="rounded-[16px] bg-white px-3 py-3">
+                    <p className="text-[11px] font-medium text-slate">적산내역 반영</p>
+                    <p className="mt-1 text-[18px] font-bold text-foreground">
+                      {reflectedUploadedPdfEstimateCount}
+                    </p>
+                  </div>
+                </div>
+              </Card>
               <StandardMatchTable
                 candidates={visibleCandidates}
-                matches={matches}
+                matches={displayedMatches}
                 onChangeStatus={handleMatchStatusChange}
                 standardItems={seed.standardItems}
               />
