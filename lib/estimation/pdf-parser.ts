@@ -28,9 +28,6 @@ type PdfJsDocumentSource = {
 };
 
 type PdfJsModuleLike = {
-  GlobalWorkerOptions?: {
-    workerSrc?: string;
-  };
   getDocument: (source: PdfJsDocumentSource) => PdfLoadingTaskLike;
 };
 
@@ -93,37 +90,16 @@ async function loadPdfDocument(
 ): Promise<{ pdf: PdfDocumentProxyLike; debugSteps: string[] }> {
   const debugSteps: string[] = [];
 
-  try {
-    const workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.mjs", import.meta.url).toString();
-    if (pdfjs.GlobalWorkerOptions) {
-      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
-      debugSteps.push(`workerSrc configured: ${workerSrc}`);
-      console.debug("[estimate/pdf] workerSrc configured", workerSrc);
-    }
-  } catch (error) {
-    const debugMessage = `workerSrc configuration skipped: ${toDebugMessage(error)}`;
-    debugSteps.push(debugMessage);
-    console.debug("[estimate/pdf]", debugMessage);
-  }
-
-  try {
-    console.debug("[estimate/pdf] getDocument start", { mode: "worker" });
-    const loadingTask = pdfjs.getDocument({ data: data.slice() });
-    const pdf = await loadingTask.promise;
-    debugSteps.push(`getDocument success with worker, numPages=${pdf.numPages}`);
-    console.debug("[estimate/pdf] getDocument success", { numPages: pdf.numPages });
-    return { pdf, debugSteps };
-  } catch (workerError) {
-    const workerDebug = `getDocument worker failed: ${toDebugMessage(workerError)}`;
-    debugSteps.push(workerDebug);
-    console.error("[estimate/pdf]", workerDebug, workerError);
-  }
-
-  console.debug("[estimate/pdf] getDocument retry", { mode: "disableWorker" });
+  // TODO: Worker disabled for Vercel build stability. Large PDFs may parse slower until
+  // a module-safe worker delivery strategy is added.
+  console.debug("[estimate/pdf] getDocument start", { mode: "disableWorker" });
   const loadingTask = pdfjs.getDocument({ data: data.slice(), disableWorker: true });
   const pdf = await loadingTask.promise;
   debugSteps.push(`getDocument success with disableWorker, numPages=${pdf.numPages}`);
-  console.debug("[estimate/pdf] getDocument retry success", { numPages: pdf.numPages });
+  console.debug("[estimate/pdf] getDocument success", {
+    mode: "disableWorker",
+    numPages: pdf.numPages
+  });
 
   return { pdf, debugSteps };
 }
