@@ -98,6 +98,7 @@ export interface DrawingExtractionCandidateRecord {
   reviewStatus: ReviewStatus;
   drawingNo?: string | null;
   drawingTitle?: string | null;
+  scale?: string | null;
   sourceNote?: string | null;
   sourceFileName?: string | null;
   sourceTextSnippet?: string | null;

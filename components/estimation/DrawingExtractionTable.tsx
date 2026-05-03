@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Pencil, SearchX, X } from "lucide-react";
+import type { CSSProperties } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,25 @@ const labelMap = {
   needs_standard_match: "품셈 매칭 필요"
 } as const;
 
+const clampedTextStyle: CSSProperties = {
+  display: "-webkit-box",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 3,
+  overflow: "hidden"
+};
+
+function getPageLabel(candidate: DrawingExtractionCandidateRecord): string {
+  return typeof candidate.sourcePage === "number" ? `p.${candidate.sourcePage}` : "-";
+}
+
+function getDrawingTitle(candidate: DrawingExtractionCandidateRecord): string {
+  if (candidate.scale) {
+    return `${candidate.drawingTitle ?? ""} · ${candidate.scale}`;
+  }
+
+  return candidate.drawingTitle ?? "";
+}
+
 export function DrawingExtractionTable({
   candidates,
   onChangeStatus
@@ -46,10 +66,11 @@ export function DrawingExtractionTable({
       />
 
       <div className="overflow-x-auto">
-        <table className="min-w-[980px] text-left">
+        <table className="min-w-[1040px] text-left">
           <thead>
             <tr className="border-b border-border text-[12px] text-slate">
-              <th className="px-2 py-3 font-medium">도면</th>
+              <th className="px-2 py-3 font-medium">출처</th>
+              <th className="px-2 py-3 font-medium">페이지</th>
               <th className="px-2 py-3 font-medium">추출유형</th>
               <th className="px-2 py-3 font-medium">후보값</th>
               <th className="px-2 py-3 font-medium">정규화</th>
@@ -63,10 +84,12 @@ export function DrawingExtractionTable({
             {candidates.map((candidate) => (
               <tr key={candidate.id} className="border-b border-border/70 align-top">
                 <td className="px-2 py-4">
-                  <p className="text-[13px] font-semibold text-foreground">
+                  <p className="max-w-[160px] truncate text-[13px] font-semibold text-foreground">
                     {candidate.drawingNo}
                   </p>
-                  <p className="mt-1 text-[12px] text-slate">{candidate.drawingTitle}</p>
+                  <p className="mt-1 max-w-[180px] truncate text-[12px] text-slate">
+                    {getDrawingTitle(candidate)}
+                  </p>
                   <Badge
                     className="mt-2"
                     tone={candidate.sourceLabel === "uploaded_pdf" ? "green" : "gray"}
@@ -74,22 +97,38 @@ export function DrawingExtractionTable({
                     {candidate.sourceLabel === "uploaded_pdf" ? "uploaded_pdf" : "sample"}
                   </Badge>
                 </td>
+                <td className="px-2 py-4 text-[13px] font-semibold text-foreground">
+                  {getPageLabel(candidate)}
+                </td>
                 <td className="px-2 py-4 text-[13px] text-foreground">
                   {candidate.extractedType}
                 </td>
                 <td className="px-2 py-4">
-                  <p className="text-[13px] font-semibold text-foreground">
+                  <p
+                    className="max-w-[260px] overflow-hidden text-[13px] font-semibold leading-5 text-foreground"
+                    style={clampedTextStyle}
+                  >
                     {candidate.extractedText}
                   </p>
-                  <p className="mt-1 text-[12px] text-slate">{candidate.sourceNote}</p>
+                  <p className="mt-1 max-w-[260px] text-[12px] leading-4 text-slate">
+                    {candidate.sourceNote}
+                  </p>
                   {candidate.sourceTextSnippet ? (
-                    <p className="mt-1 text-[11px] leading-4 text-slate">
+                    <p
+                      className="mt-1 max-w-[260px] overflow-hidden text-[11px] leading-4 text-slate"
+                      style={clampedTextStyle}
+                    >
                       {candidate.sourceTextSnippet}
                     </p>
                   ) : null}
                 </td>
                 <td className="px-2 py-4 text-[13px] text-foreground">
-                  {candidate.normalizedValue ?? "-"}
+                  <span
+                    className="block max-w-[180px] overflow-hidden leading-5"
+                    style={clampedTextStyle}
+                  >
+                    {candidate.normalizedValue ?? "-"}
+                  </span>
                 </td>
                 <td className="px-2 py-4 text-[13px] text-foreground">
                   {candidate.quantity ?? "-"} {candidate.unit ?? ""}
