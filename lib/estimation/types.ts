@@ -16,6 +16,10 @@ export type ScheduleForecastStatus = "draft" | "linked" | "review_needed";
 
 export type SupportedDrawingFileType = "pdf" | "png" | "jpg" | "dwg" | "unsupported";
 
+export type PdfTextExtractionStatus = "success" | "empty" | "failed";
+
+export type PdfTextExtractionResultStatus = "success" | "partial" | "failed";
+
 export type DrawingDataStatus = "empty" | "exists";
 
 export type EstimateDataStatus = "none" | "sample_ready" | "ready";
@@ -48,6 +52,23 @@ export interface ProjectEstimateState {
   drawingFiles: DrawingFileRecord[];
 }
 
+export interface PdfPageTextRecord {
+  id: string;
+  drawingFileId: string;
+  pageNumber: number;
+  text: string;
+  textLength: number;
+  extractionStatus: PdfTextExtractionStatus;
+}
+
+export interface PdfTextExtractionResult {
+  fileName: string;
+  pageCount: number;
+  pages: PdfPageTextRecord[];
+  status: PdfTextExtractionResultStatus;
+  message?: string;
+}
+
 export interface DrawingPageRecord {
   id: string;
   drawingFileId: string;
@@ -76,6 +97,10 @@ export interface DrawingExtractionCandidateRecord {
   drawingNo?: string | null;
   drawingTitle?: string | null;
   sourceNote?: string | null;
+  sourceFileName?: string | null;
+  sourceTextSnippet?: string | null;
+  sourceLabel?: "sample" | "uploaded_pdf";
+  extractionMethod?: string | null;
 }
 
 export interface StandardDocumentRecord {

@@ -15,6 +15,7 @@ import { DrawingUploadPanel } from "@/components/estimation/DrawingUploadPanel";
 import { EstimateItemsTable } from "@/components/estimation/EstimateItemsTable";
 import { EstimationDataStrategyCard } from "@/components/estimation/EstimationDataStrategyCard";
 import { IfcExpansionNotice } from "@/components/estimation/IfcExpansionNotice";
+import { PdfTextExtractionSummary } from "@/components/estimation/PdfTextExtractionSummary";
 import { ScheduleForecastDashboard } from "@/components/estimation/ScheduleForecastDashboard";
 import { StandardMatchTable } from "@/components/estimation/StandardMatchTable";
 import { UploadedDrawingFilesTable } from "@/components/estimation/UploadedDrawingFilesTable";
@@ -30,14 +31,17 @@ import {
 } from "@/lib/estimation/sample-data";
 import {
   buildScheduleCategorySummaries,
+  createCandidatesFromPdfText,
   createDrawingFileRecordFromFile,
   deriveEstimateItems,
+  extractPdfTextFromFile,
   getDrawingFileType
 } from "@/lib/estimation/service";
 import type {
   DrawingFileRecord,
   EstimateItemRecord,
   EstimationTabKey,
+  PdfTextExtractionResult,
   ProjectEstimateState,
   ReviewStatus
 } from "@/lib/estimation/types";
@@ -66,6 +70,7 @@ export function EstimationDashboard() {
   const [selectedProjectId, setSelectedProjectId] = useState(seed.projectId);
   const [candidates, setCandidates] = useState(() => seed.extractionCandidates);
   const [matches, setMatches] = useState(() => seed.estimateItemMatches);
+  const [pdfTextResults, setPdfTextResults] = useState<PdfTextExtractionResult[]>([]);
   const [importedSheetName, setImportedSheetName] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(
     "샘플 도면/적산 데이터가 있는 프로젝트와 도면 데이터가 없는 프로젝트 흐름을 함께 확인할 수 있습니다."
@@ -74,11 +79,22 @@ export function EstimationDashboard() {
   const selectedProject = projectStates.find((project) => project.projectId === selectedProjectId);
   const activeProject = selectedProject ?? projectStates[0];
   const drawingFiles = activeProject.drawingFiles;
+  const activeDrawingFileIds = new Set(drawingFiles.map((file) => file.id));
+  const activePdfTextResults = pdfTextResults.filter((result) =>
+    result.pages.some((page) => activeDrawingFileIds.has(page.drawingFileId))
+  );
   const drawingDataExists =
     activeProject.drawingDataStatus === "exists" || activeProject.drawingFiles.length > 0;
+  const visibleCandidates = candidates.filter((candidate) => {
+    if (candidate.sourceLabel === "uploaded_pdf") {
+      return activeDrawingFileIds.has(candidate.drawingFileId);
+    }
+
+    return activeProject.projectId === seed.projectId;
+  });
 
   const estimateItems: EstimateItemRecord[] = deriveEstimateItems({
-    candidates,
+    candidates: visibleCandidates,
     matches,
     standardItems: seed.standardItems
   });
@@ -87,7 +103,7 @@ export function EstimationDashboard() {
     (item) => item.status !== "linked"
   );
 
-  const matchingNeededCount = candidates.filter(
+  const matchingNeededCount = visibleCandidates.filter(
     (candidate) => candidate.reviewStatus === "needs_standard_match"
   ).length;
 
@@ -123,8 +139,8 @@ export function EstimationDashboard() {
     {
       key: "candidates",
       label: "추출 후보 수",
-      value: `${candidates.length}`,
-      footnote: "기존 sample data 기준 후보 수 유지",
+      value: `${visibleCandidates.length}`,
+      footnote: "sample data 후보와 업로드 PDF 후보 합산",
       tone: "blue"
     },
     {
@@ -237,7 +253,25 @@ export function EstimationDashboard() {
     );
   };
 
-  const handleDrawingUpload = (files: FileList | null) => {
+  const updateDrawingFileInActiveProject = (
+    fileId: string,
+    updates: Partial<DrawingFileRecord>
+  ) => {
+    setProjectStates((current) =>
+      current.map((project) =>
+        project.projectId === activeProject.projectId
+          ? {
+              ...project,
+              drawingFiles: project.drawingFiles.map((file) =>
+                file.id === fileId ? { ...file, ...updates } : file
+              )
+            }
+          : project
+      )
+    );
+  };
+
+  const handleDrawingUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) {
       return;
     }
@@ -245,25 +279,84 @@ export function EstimationDashboard() {
     const acceptedRecords: DrawingFileRecord[] = [];
     const messages: string[] = [];
 
-    Array.from(files).forEach((file) => {
+    for (const file of Array.from(files)) {
       const fileType = getDrawingFileType(file);
 
       if (fileType === "dwg") {
         messages.push(
           "DWG 파일은 현재 자동 변환을 지원하지 않습니다. AutoCAD에서 도면별 PDF로 변환한 뒤 업로드해주세요."
         );
-        return;
+        continue;
       }
 
       if (fileType === "unsupported") {
         messages.push(`${file.name}: 지원하지 않는 파일 형식입니다. PDF, PNG, JPG 도면을 업로드해주세요.`);
-        return;
+        continue;
       }
 
       const record = createDrawingFileRecordFromFile(file);
       acceptedRecords.push(record);
       addDrawingFileToActiveProject(record);
-    });
+
+      if (fileType !== "pdf") {
+        continue;
+      }
+
+      setNotice(`${file.name} PDF 텍스트를 추출하는 중입니다.`);
+
+      try {
+        const result = await extractPdfTextFromFile(file);
+        const resultPages =
+          result.pages.length > 0
+            ? result.pages
+            : [
+                {
+                  id: `${record.id}-text-page-failed`,
+                  drawingFileId: record.id,
+                  pageNumber: 1,
+                  text: "",
+                  textLength: 0,
+                  extractionStatus: "failed" as const
+                }
+              ];
+        const linkedResult: PdfTextExtractionResult = {
+          ...result,
+          pages: resultPages.map((page) => ({
+            ...page,
+            id: `${record.id}-text-page-${page.pageNumber}`,
+            drawingFileId: record.id
+          }))
+        };
+        const pdfCandidates = createCandidatesFromPdfText(linkedResult, record.id);
+
+        setPdfTextResults((current) => [
+          linkedResult,
+          ...current.filter((item) => item.pages[0]?.drawingFileId !== record.id)
+        ]);
+        setCandidates((current) => [
+          ...pdfCandidates,
+          ...current.filter((candidate) => candidate.drawingFileId !== record.id)
+        ]);
+        updateDrawingFileInActiveProject(record.id, {
+          pageCount: linkedResult.pageCount,
+          conversionStatus:
+            linkedResult.status === "failed" ? "텍스트 추출 실패" : "텍스트 추출 완료",
+          message: linkedResult.message
+        });
+
+        messages.push(
+          `${file.name}: ${linkedResult.pageCount}페이지, PDF 텍스트 후보 ${pdfCandidates.length}건을 생성했습니다.`
+        );
+      } catch {
+        updateDrawingFileInActiveProject(record.id, {
+          conversionStatus: "텍스트 추출 실패",
+          message: "PDF 텍스트 추출에 실패했습니다. 다음 단계에서 이미지 기반 분석이 필요합니다."
+        });
+        messages.push(
+          `${file.name}: PDF 텍스트 추출에 실패했습니다. 다음 단계에서 이미지 기반 분석이 필요합니다.`
+        );
+      }
+    }
 
     if (acceptedRecords.length > 0) {
       const lastMessage = acceptedRecords[acceptedRecords.length - 1].message;
@@ -383,15 +476,16 @@ export function EstimationDashboard() {
             onSelectFiles={handleDrawingUpload}
           />
           <UploadedDrawingFilesTable drawingFiles={drawingFiles} />
+          <PdfTextExtractionSummary results={activePdfTextResults} />
 
           {drawingDataExists ? (
             <>
               <DrawingExtractionTable
-                candidates={candidates}
+                candidates={visibleCandidates}
                 onChangeStatus={handleCandidateStatusChange}
               />
               <StandardMatchTable
-                candidates={candidates}
+                candidates={visibleCandidates}
                 matches={matches}
                 onChangeStatus={handleMatchStatusChange}
                 standardItems={seed.standardItems}

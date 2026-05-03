@@ -10,6 +10,12 @@ import type {
   StandardItemRecord,
   SupportedDrawingFileType
 } from "@/lib/estimation/types";
+export { extractPdfTextFromFile } from "@/lib/estimation/pdf-parser";
+export {
+  createCandidatesFromPdfText,
+  extractDrawingMetadataCandidates,
+  extractWorkItemCandidates
+} from "@/lib/estimation/pdf-extraction-rules";
 import { rankStandardMatches } from "@/lib/estimation/standard-match";
 
 export function formatFileSize(bytes: number): string {

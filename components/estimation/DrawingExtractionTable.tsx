@@ -33,16 +33,20 @@ export function DrawingExtractionTable({
   candidates,
   onChangeStatus
 }: DrawingExtractionTableProps) {
+  const uploadedPdfCount = candidates.filter(
+    (candidate) => candidate.sourceLabel === "uploaded_pdf"
+  ).length;
+
   return (
     <Card className="section-enter">
       <SectionHeading
         title="도면 분석 결과 후보"
-        description="샘플 추출 후보이며, 승인된 항목만 최종 적산내역에 반영됩니다."
-        action={<Badge tone="blue">DEMO DATA</Badge>}
+        description="샘플 후보와 업로드 PDF 텍스트 기반 후보를 함께 표시합니다."
+        action={<Badge tone="blue">PDF 후보 {uploadedPdfCount}건</Badge>}
       />
 
       <div className="overflow-x-auto">
-        <table className="min-w-[940px] text-left">
+        <table className="min-w-[980px] text-left">
           <thead>
             <tr className="border-b border-border text-[12px] text-slate">
               <th className="px-2 py-3 font-medium">도면</th>
@@ -59,13 +63,30 @@ export function DrawingExtractionTable({
             {candidates.map((candidate) => (
               <tr key={candidate.id} className="border-b border-border/70 align-top">
                 <td className="px-2 py-4">
-                  <p className="text-[13px] font-semibold text-foreground">{candidate.drawingNo}</p>
+                  <p className="text-[13px] font-semibold text-foreground">
+                    {candidate.drawingNo}
+                  </p>
                   <p className="mt-1 text-[12px] text-slate">{candidate.drawingTitle}</p>
+                  <Badge
+                    className="mt-2"
+                    tone={candidate.sourceLabel === "uploaded_pdf" ? "green" : "gray"}
+                  >
+                    {candidate.sourceLabel === "uploaded_pdf" ? "uploaded_pdf" : "sample"}
+                  </Badge>
                 </td>
-                <td className="px-2 py-4 text-[13px] text-foreground">{candidate.extractedType}</td>
+                <td className="px-2 py-4 text-[13px] text-foreground">
+                  {candidate.extractedType}
+                </td>
                 <td className="px-2 py-4">
-                  <p className="text-[13px] font-semibold text-foreground">{candidate.extractedText}</p>
+                  <p className="text-[13px] font-semibold text-foreground">
+                    {candidate.extractedText}
+                  </p>
                   <p className="mt-1 text-[12px] text-slate">{candidate.sourceNote}</p>
+                  {candidate.sourceTextSnippet ? (
+                    <p className="mt-1 text-[11px] leading-4 text-slate">
+                      {candidate.sourceTextSnippet}
+                    </p>
+                  ) : null}
                 </td>
                 <td className="px-2 py-4 text-[13px] text-foreground">
                   {candidate.normalizedValue ?? "-"}
@@ -77,7 +98,9 @@ export function DrawingExtractionTable({
                   {candidate.confidence ? `${Math.round(candidate.confidence * 100)}%` : "-"}
                 </td>
                 <td className="px-2 py-4">
-                  <Badge tone={toneMap[candidate.reviewStatus]}>{labelMap[candidate.reviewStatus]}</Badge>
+                  <Badge tone={toneMap[candidate.reviewStatus]}>
+                    {labelMap[candidate.reviewStatus]}
+                  </Badge>
                 </td>
                 <td className="px-2 py-4">
                   <div className="flex flex-wrap gap-2">
