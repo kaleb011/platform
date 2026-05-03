@@ -134,10 +134,37 @@ function findStandardItemById(
   return standardItems.find((item) => item.id === itemId);
 }
 
+type UploadedPdfMatchPresentation = {
+  standardItem: StandardItemRecord;
+  confidence: number;
+  reason: string;
+  displayWorkCategory: string;
+  displayStandardItemName: string;
+  displayUnit?: string | null;
+};
+
+function getCandidateSearchText(candidate: DrawingExtractionCandidateRecord): string {
+  return [
+    candidate.normalizedValue,
+    candidate.extractedText,
+    candidate.sourceTextSnippet,
+    candidate.sourceNote,
+    candidate.drawingTitle
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function includesAny(value: string, keywords: string[]): boolean {
+  const normalizedValue = value.toLowerCase();
+
+  return keywords.some((keyword) => normalizedValue.includes(keyword.toLowerCase()));
+}
+
 function pickStandardItemForCandidate(
   candidate: DrawingExtractionCandidateRecord,
   standardItems: StandardItemRecord[]
-): { standardItem: StandardItemRecord; confidence: number; reason: string } | null {
+): UploadedPdfMatchPresentation | null {
   const value = [
     candidate.normalizedValue,
     candidate.extractedText,
@@ -152,58 +179,90 @@ function pickStandardItemForCandidate(
     confidence: number;
     keywords: string[];
     reason: string;
+    displayWorkCategory: string;
+    displayStandardItemName: string;
+    displayUnit?: string;
   }> = [
     {
       standardItemId: "std-wall",
       confidence: 0.72,
       keywords: ["석고보드", "벽체", "wall"],
-      reason: "PDF 승인 후보 기반 / 벽체·석고보드 키워드 매칭"
+      reason: "PDF 텍스트 후보 기반, 벽체 마감 항목",
+      displayWorkCategory: "수장공사",
+      displayStandardItemName: "석고보드벽체 설치",
+      displayUnit: "m2"
     },
     {
       standardItemId: "std-door",
       confidence: 0.72,
-      keywords: ["방화문", "문", "door"],
-      reason: "PDF 승인 후보 기반 / 문·방화문 키워드 매칭"
+      keywords: ["방화문", "창호", "문", "door", "window"],
+      reason: "PDF 텍스트 후보 기반, 창호·문 항목",
+      displayWorkCategory: "창호공사",
+      displayStandardItemName: "방화문/창호 설치",
+      displayUnit: "EA"
     },
     {
       standardItemId: "std-rc-beam",
       confidence: 0.7,
-      keywords: ["철근", "콘크리트", "슬라브", "보", "기둥", "rc"],
-      reason: "PDF 승인 후보 기반 / 철근콘크리트 구조 키워드 매칭"
+      keywords: ["철근콘크리트", "콘크리트 보", "슬라브", "기둥", "rc"],
+      reason: "PDF 텍스트 후보 기반, 철근콘크리트 구조 항목",
+      displayWorkCategory: "철근콘크리트공사",
+      displayStandardItemName: "철근콘크리트 구조체",
+      displayUnit: "m3"
     },
     {
       standardItemId: "std-waterproof",
       confidence: 0.74,
       keywords: ["방수", "우레탄", "waterproof"],
-      reason: "PDF 승인 후보 기반 / 방수 공종 키워드 매칭"
+      reason: "PDF 텍스트 후보 기반, 방수 관련 항목",
+      displayWorkCategory: "방수공사",
+      displayStandardItemName: "우레탄 도막방수",
+      displayUnit: "m2"
+    },
+    {
+      standardItemId: "std-paving",
+      confidence: 0.68,
+      keywords: ["우수관", "오수관", "pvc이중벽관", "pvc", "맨홀", "집수정", "빗물받이"],
+      reason: "PDF 텍스트 후보 기반, 배수관·맨홀 항목",
+      displayWorkCategory: "배수공사",
+      displayStandardItemName: "배수관 설치",
+      displayUnit: "m"
+    },
+    {
+      standardItemId: "std-paving",
+      confidence: 0.68,
+      keywords: ["아스콘", "포장", "경계석", "보도블럭"],
+      reason: "PDF 텍스트 후보 기반, 포장 관련 항목",
+      displayWorkCategory: "포장공사",
+      displayStandardItemName: "아스콘포장",
+      displayUnit: "m2"
+    },
+    {
+      standardItemId: "std-wall",
+      confidence: 0.62,
+      keywords: ["thk", "경질우레탄", "글라스울", "단열재"],
+      reason: "PDF 텍스트 후보 기반, 단열재 두께 정보 확인",
+      displayWorkCategory: "단열공사",
+      displayStandardItemName: "단열재 설치",
+      displayUnit: "m2"
     },
     {
       standardItemId: "std-steel",
       confidence: 0.68,
       keywords: ["철골", "steel"],
-      reason: "PDF 승인 후보 기반 / 철골 키워드 매칭"
+      reason: "PDF 텍스트 후보 기반, 철골 항목",
+      displayWorkCategory: "철골공사",
+      displayStandardItemName: "철골 제작 및 설치",
+      displayUnit: "ton"
     },
     {
       standardItemId: "std-demolition",
       confidence: 0.68,
       keywords: ["철거", "demolition"],
-      reason: "PDF 승인 후보 기반 / 철거 키워드 매칭"
-    },
-    {
-      standardItemId: "std-paving",
-      confidence: 0.66,
-      keywords: [
-        "아스콘",
-        "포장",
-        "경계석",
-        "우수관",
-        "오수관",
-        "pvc",
-        "맨홀",
-        "집수정",
-        "빗물받이"
-      ],
-      reason: "PDF 승인 후보 기반 / 포장·배수 계열 키워드 매칭"
+      reason: "PDF 텍스트 후보 기반, 철거 항목",
+      displayWorkCategory: "철거공사",
+      displayStandardItemName: "철거공사",
+      displayUnit: "m2"
     }
   ];
 
@@ -219,7 +278,10 @@ function pickStandardItemForCandidate(
       return {
         standardItem,
         confidence: matchedRule.confidence,
-        reason: matchedRule.reason
+        reason: matchedRule.reason,
+        displayWorkCategory: matchedRule.displayWorkCategory,
+        displayStandardItemName: buildUploadedPdfStandardItemName(candidate, matchedRule.displayStandardItemName),
+        displayUnit: candidate.unit ?? matchedRule.displayUnit
       };
     }
   }
@@ -233,8 +295,108 @@ function pickStandardItemForCandidate(
   return {
     standardItem: fallbackItem,
     confidence: 0.35,
-    reason: "PDF 승인 후보 기반 / 키워드 매칭 필요"
+    reason: "PDF 텍스트 후보 기반, 표준품셈 키워드 매칭 필요",
+    displayWorkCategory: "검토 필요",
+    displayStandardItemName: "품셈 매칭 필요",
+    displayUnit: candidate.unit ?? "검토 필요"
   };
+}
+
+function buildUploadedPdfStandardItemName(
+  candidate: DrawingExtractionCandidateRecord,
+  fallbackName: string
+): string {
+  const source = getCandidateSearchText(candidate);
+  const displayValue = candidate.normalizedValue ?? candidate.extractedText;
+  const diameter = source.match(/\bD\s*\d{2,4}\b/i)?.[0]?.replace(/\s+/g, "");
+  const thickness = source.match(/\bTHK\s*\d{1,4}\b/i)?.[0]?.replace(/\s+/g, "");
+
+  if (includesAny(source, ["우수관"])) {
+    return diameter ? `우수관 설치 (${diameter})` : "우수관 설치";
+  }
+
+  if (includesAny(source, ["오수관"])) {
+    return diameter ? `오수관 설치 (${diameter})` : "오수관 설치";
+  }
+
+  if (includesAny(source, ["pvc이중벽관", "pvc"])) {
+    return diameter ? `PVC이중벽관 설치 (${diameter})` : "PVC이중벽관 설치";
+  }
+
+  if (includesAny(source, ["경계석"])) {
+    return "콘크리트 경계석 설치";
+  }
+
+  if (includesAny(source, ["보도블럭"])) {
+    return "보도블럭 포장";
+  }
+
+  if (includesAny(source, ["thk", "경질우레탄", "글라스울", "단열재"])) {
+    return thickness ? `단열재 설치 (${thickness})` : "단열재 설치";
+  }
+
+  if (includesAny(source, ["아스콘"])) {
+    return "아스콘포장";
+  }
+
+  if (displayValue.length > 0 && displayValue.length <= 30) {
+    return displayValue;
+  }
+
+  return fallbackName;
+}
+
+function getUploadedPdfDrawingNo(candidate: DrawingExtractionCandidateRecord): string {
+  if (candidate.sourcePage) {
+    return `PDF p.${candidate.sourcePage}`;
+  }
+
+  return "PDF 텍스트";
+}
+
+function getUploadedPdfDrawingTitle(candidate: DrawingExtractionCandidateRecord): string {
+  const source = getCandidateSearchText(candidate);
+
+  if (includesAny(source, ["우수관", "오수관", "pvc이중벽관", "맨홀", "집수정", "빗물받이"])) {
+    return "옥외계획/포장·배수 관련 도면";
+  }
+
+  if (includesAny(source, ["아스콘", "포장", "경계석", "보도블럭"])) {
+    return "포장계획 관련 도면";
+  }
+
+  if (includesAny(source, ["thk", "경질우레탄", "글라스울", "단열재"])) {
+    return "단열계획 관련 도면";
+  }
+
+  if (includesAny(source, ["철근", "콘크리트", "슬라브", "보", "기둥", "철골"])) {
+    return "구조 관련 도면";
+  }
+
+  if (includesAny(source, ["방수", "우레탄"])) {
+    return "방수계획 관련 도면";
+  }
+
+  if (includesAny(source, ["석고보드", "벽체", "방화문", "창호", "마감"])) {
+    return "건축 마감/창호 관련 도면";
+  }
+
+  return "PDF 텍스트 추출 후보";
+}
+
+function buildUploadedPdfRemark(
+  candidate: DrawingExtractionCandidateRecord,
+  quantityReviewRequired: boolean
+): string {
+  const details = [
+    "uploaded_pdf",
+    candidate.sourceFileName ? `출처파일: ${candidate.sourceFileName}` : null,
+    candidate.sourcePage ? `p.${candidate.sourcePage}` : null,
+    quantityReviewRequired ? "수량 검토 필요" : null,
+    "사용자 승인"
+  ].filter(Boolean);
+
+  return details.join(" / ");
 }
 
 export function createStandardMatchesFromApprovedCandidates(
@@ -260,7 +422,11 @@ export function createStandardMatchesFromApprovedCandidates(
       sourceFileName: candidate.sourceFileName ?? null,
       sourcePage: candidate.sourcePage ?? null,
       matchSource: "uploaded_pdf",
-      standardMatchStatus: "pending"
+      standardMatchStatus: "pending",
+      displayWorkCategory: picked.displayWorkCategory,
+      displayStandardItemName: picked.displayStandardItemName,
+      displayUnit: picked.displayUnit ?? null,
+      quantityReviewRequired: candidate.quantity == null
     });
 
     return matches;
@@ -275,6 +441,10 @@ export function createEstimateItemFromMatch(
   const quantity = candidate.quantity ?? 1;
   const quantityReviewRequired = candidate.quantity == null;
   const matchSource = match.matchSource ?? candidate.sourceLabel ?? "sample";
+  const isUploadedPdf = matchSource === "uploaded_pdf";
+  const fallbackUnit =
+    quantityReviewRequired && isUploadedPdf ? "검토 필요" : (standardItem.unit ?? "식");
+  const displayUnit = candidate.unit ?? match.displayUnit ?? fallbackUnit;
 
   return {
     id: `estimate-${candidate.id}-${standardItem.id}`,
@@ -282,27 +452,35 @@ export function createEstimateItemFromMatch(
     drawingFileId: candidate.drawingFileId,
     drawingPageId: candidate.drawingPageId,
     standardItemId: standardItem.id,
-    workCategory: standardItem.workCategory,
-    itemName: candidate.normalizedValue ?? standardItem.itemName,
+    workCategory: isUploadedPdf
+      ? match.displayWorkCategory ?? standardItem.workCategory
+      : standardItem.workCategory,
+    itemName: candidate.normalizedValue ?? match.displayStandardItemName ?? standardItem.itemName,
     specification:
       candidate.extractedText === candidate.normalizedValue
         ? standardItem.description ?? standardItem.section ?? ""
         : candidate.extractedText,
     quantity,
-    unit: candidate.unit ?? standardItem.unit ?? "식",
+    unit: displayUnit,
     calculationBasis:
-      candidate.sourceNote ??
-      candidate.sourceTextSnippet ??
-      standardItem.measurementRule ??
-      "PDF 승인 후보 기반, 수량 검토 필요",
+      isUploadedPdf
+        ? match.matchReason ?? "PDF 텍스트 후보 기반, 수량 검토 필요"
+        : candidate.sourceNote ??
+          candidate.sourceTextSnippet ??
+          standardItem.measurementRule ??
+          "도면 후보값을 기준으로 산출, 최종 검토 필요",
     sourceNote: match.matchReason ?? "",
     reviewStatus: match.reviewStatus,
-    standardItemName: standardItem.itemName,
-    drawingNo: candidate.drawingNo ?? "",
-    drawingTitle: candidate.drawingTitle ?? "",
+    standardItemName: isUploadedPdf
+      ? match.displayStandardItemName ?? standardItem.itemName
+      : standardItem.itemName,
+    drawingNo: isUploadedPdf ? getUploadedPdfDrawingNo(candidate) : candidate.drawingNo ?? "",
+    drawingTitle: isUploadedPdf
+      ? getUploadedPdfDrawingTitle(candidate)
+      : candidate.drawingTitle ?? "",
     remark:
-      matchSource === "uploaded_pdf"
-        ? "PDF 승인 후보 기반 / 수량 검토 필요"
+      isUploadedPdf
+        ? buildUploadedPdfRemark(candidate, quantityReviewRequired)
         : candidate.reviewStatus === "edited"
           ? "사용자 수정 후 승인"
           : "샘플 데이터 기반 승인",

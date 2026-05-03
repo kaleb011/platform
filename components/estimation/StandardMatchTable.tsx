@@ -36,6 +36,20 @@ const labelMap = {
   needs_standard_match: "추가 매칭 필요"
 } as const;
 
+function getCandidateSourceLabel(candidate: DrawingExtractionCandidateRecord) {
+  if (candidate.sourceLabel === "uploaded_pdf") {
+    return [
+      "uploaded_pdf",
+      candidate.sourceFileName ? `출처파일: ${candidate.sourceFileName}` : null,
+      candidate.sourcePage ? `p.${candidate.sourcePage}` : null
+    ]
+      .filter(Boolean)
+      .join(" / ");
+  }
+
+  return "sample";
+}
+
 export function StandardMatchTable({
   candidates,
   matches,
@@ -46,7 +60,7 @@ export function StandardMatchTable({
     <Card className="section-enter">
       <SectionHeading
         title="표준품셈 후보 매칭"
-        description="표준품셈 원문 전체 파싱 대신, 전처리된 샘플 항목에서 후보를 제안합니다."
+        description="승인된 적산 후보를 샘플 표준품셈 항목과 임시 키워드 규칙으로 연결합니다."
         action={<Badge tone="amber">USER REVIEW REQUIRED</Badge>}
       />
 
@@ -55,7 +69,7 @@ export function StandardMatchTable({
           <thead>
             <tr className="border-b border-border text-[12px] text-slate">
               <th className="px-2 py-3 font-medium">도면 후보</th>
-              <th className="px-2 py-3 font-medium">표준품셈 항목</th>
+              <th className="px-2 py-3 font-medium">표준품셈 후보</th>
               <th className="px-2 py-3 font-medium">공종</th>
               <th className="px-2 py-3 font-medium">단위</th>
               <th className="px-2 py-3 font-medium">매칭 근거</th>
@@ -73,31 +87,35 @@ export function StandardMatchTable({
                 return null;
               }
 
+              const standardItemName = match.displayStandardItemName ?? standardItem.itemName;
+              const workCategory = match.displayWorkCategory ?? standardItem.workCategory;
+              const unit = match.displayUnit ?? standardItem.unit ?? "-";
+
               return (
                 <tr key={match.id} className="border-b border-border/70 align-top">
                   <td className="px-2 py-4">
-                    <p className="text-[13px] font-semibold text-foreground">
+                    <p className="line-clamp-2 text-[13px] font-semibold text-foreground">
                       {candidate.normalizedValue ?? candidate.extractedText}
                     </p>
-                    <p className="mt-1 text-[12px] text-slate">
-                      {candidate.drawingNo} · {candidate.quantity ?? "-"} {candidate.unit ?? ""}
+                    <p className="mt-1 text-[12px] leading-5 text-slate">
+                      {getCandidateSourceLabel(candidate)}
                     </p>
                   </td>
                   <td className="px-2 py-4">
-                    <p className="text-[13px] font-semibold text-foreground">{standardItem.itemName}</p>
+                    <p className="text-[13px] font-semibold text-foreground">
+                      {standardItemName}
+                    </p>
                     <p className="mt-1 text-[12px] text-slate">
                       {standardItem.chapter}
                       {standardItem.section ? ` / ${standardItem.section}` : ""}
                     </p>
                   </td>
-                  <td className="px-2 py-4 text-[13px] text-foreground">
-                    {standardItem.workCategory}
-                  </td>
-                  <td className="px-2 py-4 text-[13px] text-foreground">
-                    {standardItem.unit ?? "-"}
-                  </td>
+                  <td className="px-2 py-4 text-[13px] text-foreground">{workCategory}</td>
+                  <td className="px-2 py-4 text-[13px] text-foreground">{unit}</td>
                   <td className="px-2 py-4">
-                    <p className="text-[13px] leading-5 text-foreground">{match.matchReason}</p>
+                    <p className="line-clamp-3 text-[13px] leading-5 text-foreground">
+                      {match.matchReason}
+                    </p>
                   </td>
                   <td className="px-2 py-4 text-[13px] text-foreground">
                     {match.confidence ? `${Math.round(match.confidence * 100)}%` : "-"}

@@ -30,6 +30,33 @@ const labelMap = {
   needs_standard_match: "매칭 필요"
 } as const;
 
+function getQuantityLabel(item: EstimateItemRecord) {
+  return item.quantityReviewRequired ? "검토 필요" : String(item.quantity);
+}
+
+function getUnitLabel(item: EstimateItemRecord) {
+  if (item.quantityReviewRequired && (!item.unit || item.unit === "식")) {
+    return "검토 필요";
+  }
+
+  return item.unit || "-";
+}
+
+function getSourceLabel(item: EstimateItemRecord) {
+  if (item.matchSource === "uploaded_pdf") {
+    return [
+      "uploaded_pdf",
+      item.sourceFileName ? `출처파일: ${item.sourceFileName}` : null,
+      item.sourcePage ? `p.${item.sourcePage}` : null,
+      item.quantityReviewRequired ? "수량 검토 필요" : null
+    ]
+      .filter(Boolean)
+      .join(" / ");
+  }
+
+  return item.remark ?? "sample data 기반 승인";
+}
+
 export function EstimateItemsTable({
   items,
   onExportCsv,
@@ -39,7 +66,7 @@ export function EstimateItemsTable({
     <Card className="section-enter">
       <SectionHeading
         title="승인된 적산내역"
-        description="사용자가 승인한 항목만 내역서에 반영합니다."
+        description="표준품셈 매칭에서 승인된 항목만 내역서와 내보내기 결과에 반영합니다."
         action={
           <div className="flex gap-2">
             <Button
@@ -90,8 +117,14 @@ export function EstimateItemsTable({
                 <td className="px-2 py-4 text-[13px] text-foreground">
                   {item.specification ?? "-"}
                 </td>
-                <td className="px-2 py-4 text-[13px] text-foreground">{item.quantity}</td>
-                <td className="px-2 py-4 text-[13px] text-foreground">{item.unit}</td>
+                <td className="px-2 py-4 text-[13px] text-foreground">
+                  {item.quantityReviewRequired ? (
+                    <Badge tone="amber">검토 필요</Badge>
+                  ) : (
+                    getQuantityLabel(item)
+                  )}
+                </td>
+                <td className="px-2 py-4 text-[13px] text-foreground">{getUnitLabel(item)}</td>
                 <td className="px-2 py-4 text-[13px] leading-5 text-foreground">
                   {item.calculationBasis ?? "-"}
                 </td>
@@ -101,7 +134,9 @@ export function EstimateItemsTable({
                 <td className="px-2 py-4">
                   <Badge tone={toneMap[item.reviewStatus]}>{labelMap[item.reviewStatus]}</Badge>
                 </td>
-                <td className="px-2 py-4 text-[13px] text-foreground">{item.remark ?? "-"}</td>
+                <td className="px-2 py-4 text-[13px] leading-5 text-foreground">
+                  {getSourceLabel(item)}
+                </td>
               </tr>
             ))}
           </tbody>

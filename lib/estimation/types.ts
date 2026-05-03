@@ -171,6 +171,10 @@ export interface EstimateItemMatchRecord {
   sourcePage?: number | null;
   matchSource?: "sample" | "uploaded_pdf" | "manual";
   standardMatchStatus?: "pending" | "accepted" | "rejected";
+  displayWorkCategory?: string;
+  displayStandardItemName?: string;
+  displayUnit?: string | null;
+  quantityReviewRequired?: boolean;
 }
 
 export interface EstimateItemRecord {
@@ -229,7 +233,7 @@ export interface EstimateExportRow {
   workCategory: string;
   itemName: string;
   specification: string;
-  quantity: number;
+  quantity: number | string;
   unit: string;
   calculationBasis: string;
   standardItemName: string;
