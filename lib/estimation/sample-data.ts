@@ -1,4 +1,4 @@
-import type { EstimationSampleData } from "@/lib/estimation/types";
+import type { EstimationSampleData, ProjectEstimateState } from "@/lib/estimation/types";
 
 export function createEstimationSampleData(): EstimationSampleData {
   const projectId = "demo-project-01";
@@ -12,18 +12,28 @@ export function createEstimationSampleData(): EstimationSampleData {
         projectId,
         fileName: "A-101_1층 평면도.pdf",
         fileType: "pdf",
+        mimeType: "application/pdf",
+        fileSize: 18_200_000,
+        fileSizeLabel: "18.2 MB",
         status: "analyzed",
+        conversionStatus: "도면 분석 완료",
         pageCount: 3,
-        uploadedAt: "2026-04-24T09:00:00+09:00"
+        uploadedAt: "2026-04-24T09:00:00+09:00",
+        message: "샘플 도면 데이터입니다."
       },
       {
         id: "drawing-b",
         projectId,
         fileName: "S-201_구조 일람표.pdf",
         fileType: "pdf",
+        mimeType: "application/pdf",
+        fileSize: 9_600_000,
+        fileSizeLabel: "9.6 MB",
         status: "converted",
+        conversionStatus: "PNG 변환 완료",
         pageCount: 2,
-        uploadedAt: "2026-04-24T09:20:00+09:00"
+        uploadedAt: "2026-04-24T09:20:00+09:00",
+        message: "샘플 도면 데이터입니다."
       }
     ],
     drawingPages: [
@@ -415,4 +425,25 @@ export function createEstimationSampleData(): EstimationSampleData {
       }
     ]
   };
+}
+
+export function createSampleProjectEstimateStates(
+  sampleData = createEstimationSampleData()
+): ProjectEstimateState[] {
+  return [
+    {
+      projectId: sampleData.projectId,
+      projectName: "수리실험동 증축공사",
+      drawingDataStatus: "exists",
+      estimateDataStatus: "sample_ready",
+      drawingFiles: sampleData.drawingFiles
+    },
+    {
+      projectId: "new-site-01",
+      projectName: "신규 현장",
+      drawingDataStatus: "empty",
+      estimateDataStatus: "none",
+      drawingFiles: []
+    }
+  ];
 }

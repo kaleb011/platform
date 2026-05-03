@@ -14,7 +14,11 @@ export type DrawingFileStatus =
 
 export type ScheduleForecastStatus = "draft" | "linked" | "review_needed";
 
-export type SupportedDrawingFileType = "pdf" | "png" | "dwg";
+export type SupportedDrawingFileType = "pdf" | "png" | "jpg" | "dwg" | "unsupported";
+
+export type DrawingDataStatus = "empty" | "exists";
+
+export type EstimateDataStatus = "none" | "sample_ready" | "ready";
 
 export type EstimationTabKey = "drawing-estimate" | "schedule-forecast";
 
@@ -23,10 +27,25 @@ export interface DrawingFileRecord {
   projectId?: string | null;
   fileName: string;
   fileType: SupportedDrawingFileType;
-  storagePath?: string | null;
+  mimeType?: string;
+  fileSize: number;
+  fileSizeLabel: string;
   status: DrawingFileStatus;
-  pageCount: number;
+  conversionStatus: string;
+  pageCount?: number | null;
   uploadedAt: string;
+  storagePath?: string | null;
+  message?: string;
+}
+
+export type UploadedDrawingFile = DrawingFileRecord;
+
+export interface ProjectEstimateState {
+  projectId: string;
+  projectName: string;
+  drawingDataStatus: DrawingDataStatus;
+  estimateDataStatus: EstimateDataStatus;
+  drawingFiles: DrawingFileRecord[];
 }
 
 export interface DrawingPageRecord {

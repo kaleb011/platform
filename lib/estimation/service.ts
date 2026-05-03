@@ -1,32 +1,117 @@
 import type {
   DrawingExtractionCandidateRecord,
   DrawingFileRecord,
-  EstimateItemRecord,
+  DrawingFileStatus,
   EstimateItemMatchRecord,
+  EstimateItemRecord,
   ScheduleCategorySummary,
   ScheduleForecastItemRecord,
   StandardItemKeywordRecord,
-  StandardItemRecord
+  StandardItemRecord,
+  SupportedDrawingFileType
 } from "@/lib/estimation/types";
 import { rankStandardMatches } from "@/lib/estimation/standard-match";
 
-export function createLocalDrawingUpload(file: File): DrawingFileRecord {
-  const extension = file.name.split(".").pop()?.toLowerCase();
-  const fileType =
-    extension === "dwg"
-      ? "dwg"
-      : extension === "png" || extension === "jpg" || extension === "jpeg"
-        ? "png"
-        : "pdf";
+export function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+
+  const units = ["B", "KB", "MB", "GB"] as const;
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  const precision = unitIndex === 0 ? 0 : 1;
+
+  return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+export function getDrawingFileType(file: File): SupportedDrawingFileType {
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const mimeType = file.type.toLowerCase();
+
+  if (mimeType === "application/pdf" || extension === "pdf") {
+    return "pdf";
+  }
+
+  if (mimeType === "image/png" || extension === "png") {
+    return "png";
+  }
+
+  if (mimeType === "image/jpeg" || extension === "jpg" || extension === "jpeg") {
+    return "jpg";
+  }
+
+  if (
+    extension === "dwg" ||
+    mimeType === "application/acad" ||
+    mimeType === "application/x-acad" ||
+    mimeType === "image/vnd.dwg"
+  ) {
+    return "dwg";
+  }
+
+  return "unsupported";
+}
+
+function buildUploadMessage(fileType: SupportedDrawingFileType): string {
+  if (fileType === "pdf") {
+    return "PDF가 업로드되었습니다. 다음 단계에서 페이지별 PNG 변환 및 도면 분석이 진행됩니다.";
+  }
+
+  if (fileType === "png" || fileType === "jpg") {
+    return "이미지 도면이 업로드되었습니다. 다음 단계에서 도면 분석이 진행됩니다.";
+  }
+
+  if (fileType === "dwg") {
+    return "DWG 파일은 현재 자동 변환을 지원하지 않습니다. AutoCAD에서 도면별 PDF로 변환한 뒤 업로드해주세요.";
+  }
+
+  return "지원하지 않는 파일 형식입니다. PDF, PNG, JPG 도면을 업로드해주세요.";
+}
+
+function buildConversionStatus(fileType: SupportedDrawingFileType): string {
+  if (fileType === "pdf") {
+    return "PNG 변환 대기";
+  }
+
+  if (fileType === "png" || fileType === "jpg") {
+    return "이미지 분석 대기";
+  }
+
+  if (fileType === "dwg") {
+    return "자동 변환 미지원";
+  }
+
+  return "지원하지 않음";
+}
+
+export function createDrawingFileRecordFromFile(file: File): DrawingFileRecord {
+  const fileType = getDrawingFileType(file);
 
   return {
     id: `upload-${crypto.randomUUID()}`,
     fileName: file.name,
     fileType,
+    mimeType: file.type || undefined,
+    fileSize: file.size,
+    fileSizeLabel: formatFileSize(file.size),
     status: "uploaded",
-    pageCount: fileType === "png" ? 1 : 0,
-    uploadedAt: new Date().toISOString()
+    conversionStatus: buildConversionStatus(fileType),
+    pageCount: fileType === "png" || fileType === "jpg" ? 1 : null,
+    uploadedAt: new Date().toISOString(),
+    storagePath: null,
+    message: buildUploadMessage(fileType)
   };
+}
+
+export function createLocalDrawingUpload(file: File): DrawingFileRecord {
+  return createDrawingFileRecordFromFile(file);
 }
 
 export function deriveEstimateItems(args: {
@@ -62,16 +147,13 @@ export function deriveEstimateItems(args: {
       calculationBasis:
         candidate.sourceNote ??
         standardItem.measurementRule ??
-        "도면 후보값을 기준으로 산출, 최종 검수 필요",
+        "도면 후보값을 기준으로 산출, 최종 검토 필요",
       sourceNote: match.matchReason ?? "",
       reviewStatus: candidate.reviewStatus,
       standardItemName: standardItem.itemName,
       drawingNo: candidate.drawingNo ?? "",
       drawingTitle: candidate.drawingTitle ?? "",
-      remark:
-        candidate.reviewStatus === "edited"
-          ? "사용자 수정 후 승인"
-          : "샘플 데이터 기반 승인"
+      remark: candidate.reviewStatus === "edited" ? "사용자 수정 후 승인" : "샘플 데이터 기반 승인"
     });
 
     return items;
@@ -126,3 +208,48 @@ export function suggestMatchesFromKeywords(args: {
 }
 
 // TODO: replace these local helpers with Supabase-backed actions and server-side services.
+export async function uploadDrawingFileToStorage(_file: File): Promise<string> {
+  throw new Error("TODO: Supabase Storage 또는 외부 저장소 업로드를 연결해야 합니다.");
+}
+
+export async function createDrawingFileRow(_record: DrawingFileRecord): Promise<DrawingFileRecord> {
+  throw new Error("TODO: drawing_files 테이블 insert를 연결해야 합니다.");
+}
+
+export async function updateDrawingFileStatus(
+  _id: string,
+  _status: DrawingFileStatus
+): Promise<void> {
+  throw new Error("TODO: drawing_files 상태 업데이트를 연결해야 합니다.");
+}
+
+export async function createDrawingPagesFromPdf(
+  _fileId: string,
+  _pages: Array<{ pageNumber: number; drawingNo?: string; drawingTitle?: string }>
+): Promise<void> {
+  throw new Error("TODO: PDF 페이지 메타데이터를 drawing_pages에 저장해야 합니다.");
+}
+
+export async function convertPdfPagesToPng(_fileId: string): Promise<void> {
+  throw new Error("TODO: PDF 페이지별 PNG 변환 서비스를 연결해야 합니다.");
+}
+
+export async function analyzeDrawingImages(
+  _fileId: string
+): Promise<DrawingExtractionCandidateRecord[]> {
+  throw new Error("TODO: 도면 이미지 분석 및 후보 추출 서비스를 연결해야 합니다.");
+}
+
+export async function importIfcModel(_file: File): Promise<string> {
+  throw new Error("TODO: IFC 모델 업로드/등록 서비스를 연결해야 합니다.");
+}
+
+export async function extractQuantitiesFromIfc(_modelId: string): Promise<EstimateItemRecord[]> {
+  throw new Error("TODO: IFC 부재 물량 추출 서비스를 연결해야 합니다.");
+}
+
+export async function mapIfcElementsToEstimateItems(
+  _modelId: string
+): Promise<EstimateItemRecord[]> {
+  throw new Error("TODO: IFC 부재와 estimate_items 매핑 서비스를 연결해야 합니다.");
+}
