@@ -61,6 +61,10 @@ function getPageCountLabel(file: DrawingFileRecord): string {
     return `${file.pageCount} page`;
   }
 
+  if (file.fileType === "pdf" && file.conversionStatus === "텍스트 추출 실패") {
+    return "확인 실패";
+  }
+
   return "확인 예정";
 }
 
@@ -100,6 +104,11 @@ export function UploadedDrawingFilesTable({ drawingFiles }: UploadedDrawingFiles
                     {file.message ? (
                       <span className="mt-1 block text-[11px] font-normal leading-4 text-slate">
                         {file.message}
+                      </span>
+                    ) : null}
+                    {file.debugMessage ? (
+                      <span className="mt-1 block text-[11px] font-normal leading-4 text-[#7a4a05]">
+                        Debug: {file.debugMessage}
                       </span>
                     ) : null}
                   </td>

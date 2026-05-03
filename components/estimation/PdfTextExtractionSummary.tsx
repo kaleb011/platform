@@ -68,6 +68,11 @@ export function PdfTextExtractionSummary({ results }: PdfTextExtractionSummaryPr
               <summary className="cursor-pointer text-[13px] font-semibold text-foreground">
                 {result.fileName} · {result.pageCount} page · {result.message ?? result.status}
               </summary>
+              {result.debugMessage ? (
+                <div className="mt-3 rounded-[14px] bg-[#fff8ea] px-3 py-2 text-[11px] leading-5 text-[#7a4a05]">
+                  Debug: {result.debugMessage}
+                </div>
+              ) : null}
               <div className="mt-3 space-y-2">
                 {result.pages.map((page) => (
                   <div key={page.id} className="rounded-[14px] bg-[#f8fbf9] px-3 py-3">

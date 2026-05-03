@@ -341,12 +341,23 @@ export function EstimationDashboard() {
           pageCount: linkedResult.pageCount,
           conversionStatus:
             linkedResult.status === "failed" ? "텍스트 추출 실패" : "텍스트 추출 완료",
-          message: linkedResult.message
+          message: linkedResult.message,
+          debugMessage: linkedResult.debugMessage
         });
 
-        messages.push(
-          `${file.name}: ${linkedResult.pageCount}페이지, PDF 텍스트 후보 ${pdfCandidates.length}건을 생성했습니다.`
-        );
+        if (linkedResult.pageCount <= 0) {
+          messages.push(
+            `${file.name}: PDF 로딩에 실패해 페이지 수를 확인하지 못했습니다. ${linkedResult.debugMessage ?? ""}`
+          );
+        } else if (linkedResult.status === "failed") {
+          messages.push(
+            `${file.name}: ${linkedResult.pageCount}페이지를 확인했지만 텍스트 추출에 실패했습니다. 이미지 기반 분석이 필요합니다.`
+          );
+        } else {
+          messages.push(
+            `${file.name}: ${linkedResult.pageCount}페이지를 확인했고 PDF 텍스트 후보 ${pdfCandidates.length}건을 생성했습니다.`
+          );
+        }
       } catch {
         updateDrawingFileInActiveProject(record.id, {
           conversionStatus: "텍스트 추출 실패",

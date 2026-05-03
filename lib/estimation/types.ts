@@ -40,6 +40,7 @@ export interface DrawingFileRecord {
   uploadedAt: string;
   storagePath?: string | null;
   message?: string;
+  debugMessage?: string;
 }
 
 export type UploadedDrawingFile = DrawingFileRecord;
@@ -67,6 +68,7 @@ export interface PdfTextExtractionResult {
   pages: PdfPageTextRecord[];
   status: PdfTextExtractionResultStatus;
   message?: string;
+  debugMessage?: string;
 }
 
 export interface DrawingPageRecord {
