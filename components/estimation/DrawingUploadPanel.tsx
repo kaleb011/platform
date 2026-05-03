@@ -36,7 +36,7 @@ export function DrawingUploadPanel({
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground">
-              도면 선택 -> 파일 메타데이터 생성 -> 업로드 목록 반영
+              도면 선택 &gt; 파일 메타데이터 생성 &gt; 업로드 목록 반영
             </p>
             <p className="mt-1 text-[12px] leading-5 text-slate">
               이번 단계에서는 실제 PDF 분석이나 PNG 변환 없이 파일명, 형식, 크기, 업로드 시간,
