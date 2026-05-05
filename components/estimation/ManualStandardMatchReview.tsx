@@ -24,6 +24,12 @@ type ManualStandardMatchReviewProps = {
 
 const HOLD_OPTION_ID = "__hold_manual_match__";
 
+type Recommendation = {
+  reason: string;
+  type: "hold" | "option";
+  option?: ManualStandardMatchOption;
+};
+
 function getCandidateLabel(candidate: DrawingExtractionCandidateRecord | undefined) {
   if (!candidate) {
     return "-";
@@ -108,6 +114,42 @@ function getPreferredOptionIds(candidate: DrawingExtractionCandidateRecord | und
   return [];
 }
 
+function getRecommendationReason(candidate: DrawingExtractionCandidateRecord | undefined) {
+  const source = getCandidateSearchText(candidate);
+
+  if (
+    (includesAny(source, ["thk"]) &&
+      !includesAny(source, ["경질우레탄", "글라스울", "단열재", "패널"])) ||
+    (includesAny(source, ["콘크리트"]) &&
+      includesAny(source, ["d900", "d300", "d200"]) &&
+      !includesAny(source, ["철근콘크리트", "슬라브", "기둥", "콘크리트 보"]))
+  ) {
+    return "후보명이 규격 조각 중심이라 자동 확정이 어렵습니다.";
+  }
+
+  if (includesAny(source, ["thk", "경질우레탄", "글라스울", "단열재", "패널"])) {
+    return "THK / 단열재 키워드 감지";
+  }
+
+  if (includesAny(source, ["아스콘", "포장", "보도블럭", "경계석"])) {
+    return "포장 관련 키워드 감지";
+  }
+
+  if (includesAny(source, ["우수관", "오수관", "pvc이중벽관", "빗물받이", "맨홀"])) {
+    return "배수관·맨홀 키워드 감지";
+  }
+
+  if (includesAny(source, ["석고보드", "벽체"])) {
+    return "석고보드 / 벽체 키워드 감지";
+  }
+
+  if (includesAny(source, ["방화문", "문", "창호"])) {
+    return "창호·문 키워드 감지";
+  }
+
+  return "자동 규칙으로 확정하기 어려워 수동 선택이 필요합니다.";
+}
+
 function getSortedOptions(
   candidate: DrawingExtractionCandidateRecord | undefined,
   options: ManualStandardMatchOption[]
@@ -126,6 +168,26 @@ function getSortedOptions(
 
     return leftRank - rightRank;
   });
+}
+
+function getRecommendation(
+  candidate: DrawingExtractionCandidateRecord | undefined,
+  sortedOptions: ManualStandardMatchOption[]
+): Recommendation {
+  const preferredIds = getPreferredOptionIds(candidate);
+
+  if (preferredIds[0] === HOLD_OPTION_ID) {
+    return {
+      reason: getRecommendationReason(candidate),
+      type: "hold"
+    };
+  }
+
+  return {
+    option: sortedOptions[0],
+    reason: getRecommendationReason(candidate),
+    type: "option"
+  };
 }
 
 export function ManualStandardMatchReview({
@@ -170,6 +232,7 @@ export function ManualStandardMatchReview({
           const sortedOptions = getSortedOptions(candidate, options);
           const preferredIds = getPreferredOptionIds(candidate);
           const shouldSuggestHold = preferredIds[0] === HOLD_OPTION_ID;
+          const recommendation = getRecommendation(candidate, sortedOptions);
           const selectedOptionId = selectedOptions[match.id] ?? "";
           const selectedOption = sortedOptions.find((option) => option.id === selectedOptionId);
           const canApprove = Boolean(
@@ -188,6 +251,16 @@ export function ManualStandardMatchReview({
                   </p>
                 </div>
                 <Badge tone="amber">품셈 매칭 필요</Badge>
+              </div>
+
+              <div className="mt-3 rounded-[16px] bg-[#fff8e6] px-3 py-3 text-[12px] leading-5">
+                <p className="font-semibold text-foreground">
+                  추천 후보:{" "}
+                  {recommendation.type === "hold"
+                    ? "품셈 매칭 보류"
+                    : recommendation.option?.label ?? "직접 선택 필요"}
+                </p>
+                <p className="mt-1 text-slate">추천 사유: {recommendation.reason}</p>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] leading-5">
