@@ -1,11 +1,11 @@
 import type { EstimateExportRow, EstimateItemRecord } from "@/lib/estimation/types";
 
 function getExportQuantity(item: EstimateItemRecord): string | number {
-  return item.quantityReviewRequired ? "검토 필요" : item.quantity;
+  return item.quantityReviewRequired || item.quantity <= 0 ? "검토 필요" : item.quantity;
 }
 
 function getExportUnit(item: EstimateItemRecord): string {
-  if (item.quantityReviewRequired && (!item.unit || item.unit === "식")) {
+  if ((item.quantityReviewRequired || item.quantity <= 0) && (!item.unit || item.unit === "식")) {
     return "검토 필요";
   }
 
@@ -18,7 +18,11 @@ function buildExportRemark(item: EstimateItemRecord): string {
       "uploaded_pdf",
       item.sourceFileName ? `출처파일: ${item.sourceFileName}` : null,
       item.sourcePage ? `p.${item.sourcePage}` : null,
-      item.quantityReviewRequired ? "수량 검토 필요" : null,
+      item.quantityReviewRequired || item.quantity <= 0
+        ? item.quantity <= 0
+          ? "수량 0 추출값 검토 필요"
+          : "수량 검토 필요"
+        : null,
       item.reviewStatus === "accepted" || item.reviewStatus === "edited" ? "사용자 승인" : null
     ].filter(Boolean);
 

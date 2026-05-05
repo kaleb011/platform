@@ -31,11 +31,11 @@ const labelMap = {
 } as const;
 
 function getQuantityLabel(item: EstimateItemRecord) {
-  return item.quantityReviewRequired ? "검토 필요" : String(item.quantity);
+  return item.quantityReviewRequired || item.quantity <= 0 ? "검토 필요" : String(item.quantity);
 }
 
 function getUnitLabel(item: EstimateItemRecord) {
-  if (item.quantityReviewRequired && (!item.unit || item.unit === "식")) {
+  if ((item.quantityReviewRequired || item.quantity <= 0) && (!item.unit || item.unit === "식")) {
     return "검토 필요";
   }
 
@@ -48,7 +48,11 @@ function getSourceLabel(item: EstimateItemRecord) {
       "uploaded_pdf",
       item.sourceFileName ? `출처파일: ${item.sourceFileName}` : null,
       item.sourcePage ? `p.${item.sourcePage}` : null,
-      item.quantityReviewRequired ? "수량 검토 필요" : null
+      item.quantityReviewRequired || item.quantity <= 0
+        ? item.quantity <= 0
+          ? "수량 0 추출값 검토 필요"
+          : "수량 검토 필요"
+        : null
     ]
       .filter(Boolean)
       .join(" / ");
@@ -118,7 +122,7 @@ export function EstimateItemsTable({
                   {item.specification ?? "-"}
                 </td>
                 <td className="px-2 py-4 text-[13px] text-foreground">
-                  {item.quantityReviewRequired ? (
+                  {item.quantityReviewRequired || item.quantity <= 0 ? (
                     <Badge tone="amber">검토 필요</Badge>
                   ) : (
                     getQuantityLabel(item)

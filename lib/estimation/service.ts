@@ -173,6 +173,10 @@ function pickStandardItemForCandidate(
   ]
     .filter(Boolean)
     .join(" ");
+  const primaryValue = [candidate.normalizedValue, candidate.extractedText]
+    .filter(Boolean)
+    .join(" ");
+  const matchTarget = primaryValue || value;
 
   const rules: Array<{
     standardItemId: string;
@@ -198,8 +202,44 @@ function pickStandardItemForCandidate(
       keywords: ["방화문", "창호", "문", "door", "window"],
       reason: "PDF 텍스트 후보 기반, 창호·문 항목",
       displayWorkCategory: "창호공사",
-      displayStandardItemName: "방화문/창호 설치",
+      displayStandardItemName: "창호 설치",
       displayUnit: "EA"
+    },
+    {
+      standardItemId: "std-paving",
+      confidence: 0.72,
+      keywords: ["아스콘", "아스콘포장", "보도블럭", "경계석", "포장"],
+      reason: "PDF 텍스트 후보 기반, 포장 관련 항목",
+      displayWorkCategory: "포장공사",
+      displayStandardItemName: "아스콘포장",
+      displayUnit: "m2"
+    },
+    {
+      standardItemId: "std-paving",
+      confidence: 0.7,
+      keywords: ["우수관", "오수관", "pvc이중벽관", "pvc", "빗물받이", "맨홀", "집수정"],
+      reason: "PDF 텍스트 후보 기반, 배수관·맨홀 항목",
+      displayWorkCategory: "배수공사",
+      displayStandardItemName: "배수관 설치",
+      displayUnit: "m"
+    },
+    {
+      standardItemId: "std-wall",
+      confidence: 0.68,
+      keywords: ["경질우레탄", "글라스울", "단열재", "패널"],
+      reason: "PDF 텍스트 후보 기반, 단열재 두께 정보 확인",
+      displayWorkCategory: "단열공사",
+      displayStandardItemName: "단열재 설치",
+      displayUnit: "m2"
+    },
+    {
+      standardItemId: "std-waterproof",
+      confidence: 0.74,
+      keywords: ["방수", "우레탄 방수", "옥상 방수", "waterproof"],
+      reason: "PDF 텍스트 후보 기반, 방수 관련 항목",
+      displayWorkCategory: "방수공사",
+      displayStandardItemName: "방수층 시공",
+      displayUnit: "m2"
     },
     {
       standardItemId: "std-rc-beam",
@@ -209,42 +249,6 @@ function pickStandardItemForCandidate(
       displayWorkCategory: "철근콘크리트공사",
       displayStandardItemName: "철근콘크리트 구조체",
       displayUnit: "m3"
-    },
-    {
-      standardItemId: "std-waterproof",
-      confidence: 0.74,
-      keywords: ["방수", "우레탄", "waterproof"],
-      reason: "PDF 텍스트 후보 기반, 방수 관련 항목",
-      displayWorkCategory: "방수공사",
-      displayStandardItemName: "우레탄 도막방수",
-      displayUnit: "m2"
-    },
-    {
-      standardItemId: "std-paving",
-      confidence: 0.68,
-      keywords: ["우수관", "오수관", "pvc이중벽관", "pvc", "맨홀", "집수정", "빗물받이"],
-      reason: "PDF 텍스트 후보 기반, 배수관·맨홀 항목",
-      displayWorkCategory: "배수공사",
-      displayStandardItemName: "배수관 설치",
-      displayUnit: "m"
-    },
-    {
-      standardItemId: "std-paving",
-      confidence: 0.68,
-      keywords: ["아스콘", "포장", "경계석", "보도블럭"],
-      reason: "PDF 텍스트 후보 기반, 포장 관련 항목",
-      displayWorkCategory: "포장공사",
-      displayStandardItemName: "아스콘포장",
-      displayUnit: "m2"
-    },
-    {
-      standardItemId: "std-wall",
-      confidence: 0.62,
-      keywords: ["thk", "경질우레탄", "글라스울", "단열재"],
-      reason: "PDF 텍스트 후보 기반, 단열재 두께 정보 확인",
-      displayWorkCategory: "단열공사",
-      displayStandardItemName: "단열재 설치",
-      displayUnit: "m2"
     },
     {
       standardItemId: "std-steel",
@@ -266,7 +270,7 @@ function pickStandardItemForCandidate(
     }
   ];
 
-  const normalizedValue = value.toLowerCase();
+  const normalizedValue = matchTarget.toLowerCase();
   const matchedRule = rules.find((rule) =>
     rule.keywords.some((keyword) => normalizedValue.includes(keyword.toLowerCase()))
   );
@@ -280,7 +284,10 @@ function pickStandardItemForCandidate(
         confidence: matchedRule.confidence,
         reason: matchedRule.reason,
         displayWorkCategory: matchedRule.displayWorkCategory,
-        displayStandardItemName: buildUploadedPdfStandardItemName(candidate, matchedRule.displayStandardItemName),
+        displayStandardItemName: buildUploadedPdfStandardItemName(
+          candidate,
+          matchedRule.displayStandardItemName
+        ),
         displayUnit: candidate.unit ?? matchedRule.displayUnit
       };
     }
@@ -306,37 +313,87 @@ function buildUploadedPdfStandardItemName(
   candidate: DrawingExtractionCandidateRecord,
   fallbackName: string
 ): string {
-  const source = getCandidateSearchText(candidate);
+  const primarySource = [candidate.normalizedValue, candidate.extractedText]
+    .filter(Boolean)
+    .join(" ");
   const displayValue = candidate.normalizedValue ?? candidate.extractedText;
-  const diameter = source.match(/\bD\s*\d{2,4}\b/i)?.[0]?.replace(/\s+/g, "");
-  const thickness = source.match(/\bTHK\s*\d{1,4}\b/i)?.[0]?.replace(/\s+/g, "");
+  const diameter = primarySource.match(/\bD\s*\d{2,4}\b/i)?.[0]?.replace(/\s+/g, "");
+  const thickness = primarySource.match(/\bTHK\s*\d{1,4}\b/i)?.[0]?.replace(/\s+/g, "");
 
-  if (includesAny(source, ["우수관"])) {
-    return diameter ? `우수관 설치 (${diameter})` : "우수관 설치";
+  if (includesAny(primarySource, ["석고보드", "석고보드벽체"])) {
+    return "석고보드벽체 설치";
   }
 
-  if (includesAny(source, ["오수관"])) {
-    return diameter ? `오수관 설치 (${diameter})` : "오수관 설치";
+  if (includesAny(primarySource, ["방화문"])) {
+    return "방화문 설치";
   }
 
-  if (includesAny(source, ["pvc이중벽관", "pvc"])) {
-    return diameter ? `PVC이중벽관 설치 (${diameter})` : "PVC이중벽관 설치";
+  if (includesAny(primarySource, ["창호"])) {
+    return "창호 설치";
   }
 
-  if (includesAny(source, ["경계석"])) {
+  if (includesAny(primarySource, ["아스콘"])) {
+    return "아스콘포장";
+  }
+
+  if (includesAny(primarySource, ["경계석"])) {
     return "콘크리트 경계석 설치";
   }
 
-  if (includesAny(source, ["보도블럭"])) {
+  if (includesAny(primarySource, ["보도블럭"])) {
     return "보도블럭 포장";
   }
 
-  if (includesAny(source, ["thk", "경질우레탄", "글라스울", "단열재"])) {
+  if (includesAny(primarySource, ["우수관"])) {
+    return diameter ? `우수관 설치 (${diameter})` : "우수관 설치";
+  }
+
+  if (includesAny(primarySource, ["오수관"])) {
+    return diameter ? `오수관 설치 (${diameter})` : "오수관 설치";
+  }
+
+  if (includesAny(primarySource, ["pvc이중벽관", "pvc"])) {
+    return diameter ? `PVC이중벽관 설치 (${diameter})` : "PVC이중벽관 설치";
+  }
+
+  if (includesAny(primarySource, ["빗물받이"])) {
+    return "빗물받이 설치";
+  }
+
+  if (includesAny(primarySource, ["맨홀"])) {
+    return "맨홀 설치";
+  }
+
+  if (includesAny(primarySource, ["경질우레탄", "글라스울", "단열재", "패널"])) {
     return thickness ? `단열재 설치 (${thickness})` : "단열재 설치";
   }
 
-  if (includesAny(source, ["아스콘"])) {
-    return "아스콘포장";
+  if (includesAny(primarySource, ["우레탄 방수"])) {
+    return "우레탄 방수";
+  }
+
+  if (includesAny(primarySource, ["방수"])) {
+    return "방수층 시공";
+  }
+
+  if (includesAny(primarySource, ["슬라브"])) {
+    return "슬라브 콘크리트 타설";
+  }
+
+  if (includesAny(primarySource, ["기둥"])) {
+    return "철근콘크리트 기둥 타설";
+  }
+
+  if (includesAny(primarySource, ["콘크리트 보", "철근콘크리트 보"])) {
+    return "철근콘크리트 보 타설";
+  }
+
+  if (includesAny(primarySource, ["철골"])) {
+    return "철골 설치";
+  }
+
+  if (includesAny(primarySource, ["철거"])) {
+    return "철거 작업";
   }
 
   if (displayValue.length > 0 && displayValue.length <= 30) {
@@ -388,11 +445,13 @@ function buildUploadedPdfRemark(
   candidate: DrawingExtractionCandidateRecord,
   quantityReviewRequired: boolean
 ): string {
+  const quantityReviewLabel =
+    candidate.quantity === 0 ? "수량 0 추출값 검토 필요" : "수량 검토 필요";
   const details = [
     "uploaded_pdf",
     candidate.sourceFileName ? `출처파일: ${candidate.sourceFileName}` : null,
     candidate.sourcePage ? `p.${candidate.sourcePage}` : null,
-    quantityReviewRequired ? "수량 검토 필요" : null,
+    quantityReviewRequired ? quantityReviewLabel : null,
     "사용자 승인"
   ].filter(Boolean);
 
@@ -426,7 +485,7 @@ export function createStandardMatchesFromApprovedCandidates(
       displayWorkCategory: picked.displayWorkCategory,
       displayStandardItemName: picked.displayStandardItemName,
       displayUnit: picked.displayUnit ?? null,
-      quantityReviewRequired: candidate.quantity == null
+      quantityReviewRequired: candidate.quantity == null || candidate.quantity <= 0
     });
 
     return matches;
@@ -439,7 +498,7 @@ export function createEstimateItemFromMatch(
   standardItem: StandardItemRecord
 ): EstimateItemRecord {
   const quantity = candidate.quantity ?? 1;
-  const quantityReviewRequired = candidate.quantity == null;
+  const quantityReviewRequired = candidate.quantity == null || candidate.quantity <= 0;
   const matchSource = match.matchSource ?? candidate.sourceLabel ?? "sample";
   const isUploadedPdf = matchSource === "uploaded_pdf";
   const fallbackUnit =
