@@ -4,6 +4,7 @@ import type {
   DrawingFileStatus,
   EstimateItemMatchRecord,
   EstimateItemRecord,
+  ManualStandardMatchOption,
   ScheduleCategorySummary,
   ScheduleForecastItemRecord,
   StandardItemKeywordRecord,
@@ -443,16 +444,18 @@ function getUploadedPdfDrawingTitle(candidate: DrawingExtractionCandidateRecord)
 
 function buildUploadedPdfRemark(
   candidate: DrawingExtractionCandidateRecord,
-  quantityReviewRequired: boolean
+  quantityReviewRequired: boolean,
+  source: "uploaded_pdf" | "manual_match" = "uploaded_pdf"
 ): string {
   const quantityReviewLabel =
     candidate.quantity === 0 ? "수량 0 추출값 검토 필요" : "수량 검토 필요";
   const details = [
-    "uploaded_pdf",
+    source,
+    source === "manual_match" ? "uploaded_pdf" : null,
     candidate.sourceFileName ? `출처파일: ${candidate.sourceFileName}` : null,
     candidate.sourcePage ? `p.${candidate.sourcePage}` : null,
     quantityReviewRequired ? quantityReviewLabel : null,
-    "사용자 승인"
+    source === "manual_match" ? "사용자 수동 매칭 승인" : "사용자 승인"
   ].filter(Boolean);
 
   return details.join(" / ");
@@ -492,6 +495,197 @@ export function createStandardMatchesFromApprovedCandidates(
   }, []);
 }
 
+function findFallbackStandardItemId(
+  standardItems: StandardItemRecord[],
+  preferredId: string
+): string {
+  return standardItems.find((item) => item.id === preferredId)?.id ?? standardItems[0]?.id ?? "";
+}
+
+export function createManualStandardMatchOptions(
+  standardItems: StandardItemRecord[]
+): ManualStandardMatchOption[] {
+  return [
+    {
+      id: "manual-gypsum-wall",
+      label: "석고보드벽체 설치",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-wall"),
+      workCategory: "수장공사",
+      standardItemName: "석고보드벽체 설치",
+      unit: "m2",
+      calculationBasis: "사용자 수동 매칭, 벽체 마감 항목",
+      confidence: 0.9
+    },
+    {
+      id: "manual-fire-door",
+      label: "방화문 설치",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-door"),
+      workCategory: "창호공사",
+      standardItemName: "방화문 설치",
+      unit: "EA",
+      calculationBasis: "사용자 수동 매칭, 창호·문 항목",
+      confidence: 0.9
+    },
+    {
+      id: "manual-rc-beam",
+      label: "철근콘크리트 보 타설",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-rc-beam"),
+      workCategory: "철근콘크리트공사",
+      standardItemName: "철근콘크리트 보 타설",
+      unit: "m3",
+      calculationBasis: "사용자 수동 매칭, 철근콘크리트 구조 항목",
+      confidence: 0.88
+    },
+    {
+      id: "manual-rc-slab",
+      label: "슬라브 콘크리트 타설",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-rc-beam"),
+      workCategory: "철근콘크리트공사",
+      standardItemName: "슬라브 콘크리트 타설",
+      unit: "m3",
+      calculationBasis: "사용자 수동 매칭, 슬라브 구조 항목",
+      confidence: 0.88
+    },
+    {
+      id: "manual-waterproof",
+      label: "우레탄 방수",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-waterproof"),
+      workCategory: "방수공사",
+      standardItemName: "우레탄 방수",
+      unit: "m2",
+      calculationBasis: "사용자 수동 매칭, 방수 관련 항목",
+      confidence: 0.9
+    },
+    {
+      id: "manual-ascon",
+      label: "아스콘포장",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-paving"),
+      workCategory: "포장공사",
+      standardItemName: "아스콘포장",
+      unit: "m2",
+      calculationBasis: "사용자 수동 매칭, 포장 관련 항목",
+      confidence: 0.9
+    },
+    {
+      id: "manual-block",
+      label: "보도블럭 포장",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-paving"),
+      workCategory: "포장공사",
+      standardItemName: "보도블럭 포장",
+      unit: "m2",
+      calculationBasis: "사용자 수동 매칭, 보도블럭 포장 항목",
+      confidence: 0.88
+    },
+    {
+      id: "manual-curb",
+      label: "콘크리트 경계석 설치",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-paving"),
+      workCategory: "포장공사",
+      standardItemName: "콘크리트 경계석 설치",
+      unit: "m",
+      calculationBasis: "사용자 수동 매칭, 경계석 설치 항목",
+      confidence: 0.88
+    },
+    {
+      id: "manual-rain-pipe",
+      label: "우수관 설치",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-paving"),
+      workCategory: "배수공사",
+      standardItemName: "우수관 설치",
+      unit: "m",
+      calculationBasis: "사용자 수동 매칭, 배수관 항목",
+      confidence: 0.88
+    },
+    {
+      id: "manual-sewer-pipe",
+      label: "오수관 설치",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-paving"),
+      workCategory: "배수공사",
+      standardItemName: "오수관 설치",
+      unit: "m",
+      calculationBasis: "사용자 수동 매칭, 배수관 항목",
+      confidence: 0.88
+    },
+    {
+      id: "manual-pvc-pipe",
+      label: "PVC이중벽관 설치",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-paving"),
+      workCategory: "배수공사",
+      standardItemName: "PVC이중벽관 설치",
+      unit: "m",
+      calculationBasis: "사용자 수동 매칭, PVC 배수관 항목",
+      confidence: 0.88
+    },
+    {
+      id: "manual-manhole",
+      label: "맨홀 설치",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-paving"),
+      workCategory: "배수공사",
+      standardItemName: "맨홀 설치",
+      unit: "EA",
+      calculationBasis: "사용자 수동 매칭, 맨홀 항목",
+      confidence: 0.86
+    },
+    {
+      id: "manual-catch-basin",
+      label: "빗물받이 설치",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-paving"),
+      workCategory: "배수공사",
+      standardItemName: "빗물받이 설치",
+      unit: "EA",
+      calculationBasis: "사용자 수동 매칭, 빗물받이 항목",
+      confidence: 0.86
+    },
+    {
+      id: "manual-insulation",
+      label: "단열재 설치",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-wall"),
+      workCategory: "단열공사",
+      standardItemName: "단열재 설치",
+      unit: "m2",
+      calculationBasis: "사용자 수동 매칭, 단열재 항목",
+      confidence: 0.88
+    },
+    {
+      id: "manual-steel",
+      label: "철골 설치",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-steel"),
+      workCategory: "철골공사",
+      standardItemName: "철골 설치",
+      unit: "ton",
+      calculationBasis: "사용자 수동 매칭, 철골 항목",
+      confidence: 0.88
+    },
+    {
+      id: "manual-demolition",
+      label: "철거 작업",
+      standardItemId: findFallbackStandardItemId(standardItems, "std-demolition"),
+      workCategory: "철거공사",
+      standardItemName: "철거 작업",
+      unit: "m2",
+      calculationBasis: "사용자 수동 매칭, 철거 항목",
+      confidence: 0.86
+    }
+  ].filter((option) => option.standardItemId);
+}
+
+export function isManualStandardMatchTarget(match: EstimateItemMatchRecord): boolean {
+  if (match.reviewStatus === "accepted" || match.reviewStatus === "edited" || match.reviewStatus === "rejected") {
+    return false;
+  }
+
+  if (match.matchSource !== "uploaded_pdf") {
+    return false;
+  }
+
+  return (
+    match.reviewStatus === "needs_standard_match" ||
+    match.displayWorkCategory === "검토 필요" ||
+    match.displayStandardItemName === "품셈 매칭 필요" ||
+    (match.confidence ?? 1) < 0.45
+  );
+}
+
 export function createEstimateItemFromMatch(
   match: EstimateItemMatchRecord,
   candidate: DrawingExtractionCandidateRecord,
@@ -500,7 +694,8 @@ export function createEstimateItemFromMatch(
   const quantity = candidate.quantity ?? 1;
   const quantityReviewRequired = candidate.quantity == null || candidate.quantity <= 0;
   const matchSource = match.matchSource ?? candidate.sourceLabel ?? "sample";
-  const isUploadedPdf = matchSource === "uploaded_pdf";
+  const isManualMatch = matchSource === "manual";
+  const isUploadedPdf = matchSource === "uploaded_pdf" || isManualMatch;
   const fallbackUnit =
     quantityReviewRequired && isUploadedPdf ? "검토 필요" : (standardItem.unit ?? "식");
   const displayUnit = candidate.unit ?? match.displayUnit ?? fallbackUnit;
@@ -539,7 +734,11 @@ export function createEstimateItemFromMatch(
       : candidate.drawingTitle ?? "",
     remark:
       isUploadedPdf
-        ? buildUploadedPdfRemark(candidate, quantityReviewRequired)
+        ? buildUploadedPdfRemark(
+            candidate,
+            quantityReviewRequired,
+            isManualMatch ? "manual_match" : "uploaded_pdf"
+          )
         : candidate.reviewStatus === "edited"
           ? "사용자 수정 후 승인"
           : "샘플 데이터 기반 승인",

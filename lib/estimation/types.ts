@@ -177,6 +177,17 @@ export interface EstimateItemMatchRecord {
   quantityReviewRequired?: boolean;
 }
 
+export interface ManualStandardMatchOption {
+  id: string;
+  label: string;
+  standardItemId: string;
+  workCategory: string;
+  standardItemName: string;
+  unit: string;
+  calculationBasis: string;
+  confidence: number;
+}
+
 export interface EstimateItemRecord {
   id: string;
   projectId?: string | null;

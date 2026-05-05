@@ -13,9 +13,11 @@ function getExportUnit(item: EstimateItemRecord): string {
 }
 
 function buildExportRemark(item: EstimateItemRecord): string {
-  if (item.matchSource === "uploaded_pdf") {
+  if (item.matchSource === "uploaded_pdf" || item.matchSource === "manual") {
+    const sourceLabel = item.matchSource === "manual" ? "manual_match" : "uploaded_pdf";
     const details = [
-      "uploaded_pdf",
+      sourceLabel,
+      item.matchSource === "manual" ? "uploaded_pdf" : null,
       item.sourceFileName ? `출처파일: ${item.sourceFileName}` : null,
       item.sourcePage ? `p.${item.sourcePage}` : null,
       item.quantityReviewRequired || item.quantity <= 0
@@ -23,7 +25,11 @@ function buildExportRemark(item: EstimateItemRecord): string {
           ? "수량 0 추출값 검토 필요"
           : "수량 검토 필요"
         : null,
-      item.reviewStatus === "accepted" || item.reviewStatus === "edited" ? "사용자 승인" : null
+      item.matchSource === "manual"
+        ? "사용자 수동 매칭 승인"
+        : item.reviewStatus === "accepted" || item.reviewStatus === "edited"
+          ? "사용자 승인"
+          : null
     ].filter(Boolean);
 
     return details.join(" / ");

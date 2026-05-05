@@ -43,16 +43,18 @@ function getUnitLabel(item: EstimateItemRecord) {
 }
 
 function getSourceLabel(item: EstimateItemRecord) {
-  if (item.matchSource === "uploaded_pdf") {
+  if (item.matchSource === "uploaded_pdf" || item.matchSource === "manual") {
     return [
-      "uploaded_pdf",
+      item.matchSource === "manual" ? "manual_match" : "uploaded_pdf",
+      item.matchSource === "manual" ? "uploaded_pdf" : null,
       item.sourceFileName ? `출처파일: ${item.sourceFileName}` : null,
       item.sourcePage ? `p.${item.sourcePage}` : null,
       item.quantityReviewRequired || item.quantity <= 0
         ? item.quantity <= 0
           ? "수량 0 추출값 검토 필요"
           : "수량 검토 필요"
-        : null
+        : null,
+      item.matchSource === "manual" ? "사용자 수동 매칭 승인" : null
     ]
       .filter(Boolean)
       .join(" / ");

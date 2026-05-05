@@ -15,6 +15,7 @@ import { DrawingUploadPanel } from "@/components/estimation/DrawingUploadPanel";
 import { EstimateItemsTable } from "@/components/estimation/EstimateItemsTable";
 import { EstimationDataStrategyCard } from "@/components/estimation/EstimationDataStrategyCard";
 import { IfcExpansionNotice } from "@/components/estimation/IfcExpansionNotice";
+import { ManualStandardMatchReview } from "@/components/estimation/ManualStandardMatchReview";
 import { PdfTextExtractionSummary } from "@/components/estimation/PdfTextExtractionSummary";
 import { ScheduleForecastDashboard } from "@/components/estimation/ScheduleForecastDashboard";
 import { StandardMatchTable } from "@/components/estimation/StandardMatchTable";
@@ -33,15 +34,18 @@ import {
   buildScheduleCategorySummaries,
   createCandidatesFromPdfText,
   createDrawingFileRecordFromFile,
+  createManualStandardMatchOptions,
   createStandardMatchesFromApprovedCandidates,
   deriveEstimateItems,
   extractPdfTextFromFile,
   getApprovedEstimateCandidates,
-  getDrawingFileType
+  getDrawingFileType,
+  isManualStandardMatchTarget
 } from "@/lib/estimation/service";
 import type {
   DrawingFileRecord,
   EstimateItemRecord,
+  EstimateItemMatchRecord,
   EstimationTabKey,
   PdfTextExtractionResult,
   ProjectEstimateState,
@@ -119,6 +123,18 @@ export function EstimationDashboard() {
       ...uploadedPdfCandidateMatches.filter((match) => !storedMatchIds.has(match.id))
     ];
   }, [approvedEstimateCandidateIds, matches, uploadedPdfCandidateMatches]);
+  const manualMatchOptions = useMemo(
+    () => createManualStandardMatchOptions(seed.standardItems),
+    [seed.standardItems]
+  );
+  const manualReviewMatches = useMemo(
+    () => displayedMatches.filter((match) => isManualStandardMatchTarget(match)),
+    [displayedMatches]
+  );
+  const automaticReviewMatches = useMemo(
+    () => displayedMatches.filter((match) => !isManualStandardMatchTarget(match)),
+    [displayedMatches]
+  );
 
   const estimateItems: EstimateItemRecord[] = deriveEstimateItems({
     candidates: visibleCandidates,
@@ -297,6 +313,100 @@ export function EstimationDashboard() {
     );
 
     setNotice("표준품셈 검토 결과를 반영했습니다. 필요하면 품셈 매칭 필요 상태로 다시 돌릴 수 있습니다.");
+  };
+
+  const handleManualMatchApprove = (matchId: string, optionId: string) => {
+    const match = displayedMatches.find((item) => item.id === matchId);
+    const option = manualMatchOptions.find((item) => item.id === optionId);
+
+    if (!match || !option) {
+      return;
+    }
+
+    const approvedManualMatch: EstimateItemMatchRecord = {
+      ...match,
+      standardItemId: option.standardItemId,
+      matchReason: option.calculationBasis,
+      confidence: option.confidence,
+      reviewStatus: "accepted",
+      standardMatchStatus: "accepted",
+      matchSource: "manual",
+      displayWorkCategory: option.workCategory,
+      displayStandardItemName: option.standardItemName,
+      displayUnit: option.unit,
+      quantityReviewRequired: match.quantityReviewRequired
+    };
+
+    setMatches((current) => {
+      const baseMatches = current.some((item) => item.id === matchId)
+        ? current
+        : [...current, match];
+
+      return baseMatches.map((item) => {
+        if (item.drawingExtractionId !== match.drawingExtractionId) {
+          return item;
+        }
+
+        if (item.id === matchId) {
+          return approvedManualMatch;
+        }
+
+        return {
+          ...item,
+          reviewStatus: "rejected",
+          standardMatchStatus: "rejected"
+        };
+      });
+    });
+
+    setCandidates((current) =>
+      current.map((candidate) =>
+        candidate.id === match.drawingExtractionId
+          ? {
+              ...candidate,
+              reviewStatus: "accepted"
+            }
+          : candidate
+      )
+    );
+
+    setNotice(
+      "수동 품셈 매칭을 승인했습니다. 승인된 적산내역과 CSV/Excel 내보내기에 manual_match로 반영됩니다."
+    );
+  };
+
+  const handleManualMatchReviewStatusChange = (
+    matchId: string,
+    reviewStatus: ReviewStatus
+  ) => {
+    const match = displayedMatches.find((item) => item.id === matchId);
+
+    if (!match) {
+      return;
+    }
+
+    setMatches((current) => {
+      const baseMatches = current.some((item) => item.id === matchId)
+        ? current
+        : [...current, match];
+
+      return baseMatches.map((item) =>
+        item.id === matchId
+          ? {
+              ...item,
+              reviewStatus,
+              standardMatchStatus:
+                reviewStatus === "rejected"
+                  ? "rejected"
+                  : reviewStatus === "accepted" || reviewStatus === "edited"
+                    ? "accepted"
+                    : "pending"
+            }
+          : item
+      );
+    });
+
+    setNotice("수동 품셈 매칭 검토 상태를 변경했습니다. 후보 승인 상태는 유지됩니다.");
   };
 
   const addDrawingFileToActiveProject = (record: DrawingFileRecord) => {
@@ -589,9 +699,16 @@ export function EstimationDashboard() {
               </Card>
               <StandardMatchTable
                 candidates={visibleCandidates}
-                matches={displayedMatches}
+                matches={automaticReviewMatches}
                 onChangeStatus={handleMatchStatusChange}
                 standardItems={seed.standardItems}
+              />
+              <ManualStandardMatchReview
+                candidates={visibleCandidates}
+                matches={manualReviewMatches}
+                onApproveManualMatch={handleManualMatchApprove}
+                onChangeStatus={handleManualMatchReviewStatusChange}
+                options={manualMatchOptions}
               />
               <EstimateItemsTable
                 items={estimateItems}
