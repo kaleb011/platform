@@ -13,25 +13,32 @@ import {
 import { DrawingExtractionTable } from "@/components/estimation/DrawingExtractionTable";
 import { DrawingUploadPanel } from "@/components/estimation/DrawingUploadPanel";
 import { EstimateItemsTable } from "@/components/estimation/EstimateItemsTable";
+import { EstimateStatementTable } from "@/components/estimation/EstimateStatementTable";
 import { EstimationDataStrategyCard } from "@/components/estimation/EstimationDataStrategyCard";
 import { IfcExpansionNotice } from "@/components/estimation/IfcExpansionNotice";
 import { ManualStandardMatchReview } from "@/components/estimation/ManualStandardMatchReview";
 import { PdfTextExtractionSummary } from "@/components/estimation/PdfTextExtractionSummary";
 import { ScheduleForecastDashboard } from "@/components/estimation/ScheduleForecastDashboard";
 import { StandardMatchTable } from "@/components/estimation/StandardMatchTable";
+import { UnitPriceUploadPanel } from "@/components/estimation/UnitPriceUploadPanel";
 import { UploadedDrawingFilesTable } from "@/components/estimation/UploadedDrawingFilesTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
-import { exportEstimateToCsv, exportEstimateToExcel } from "@/lib/estimation/export-estimate";
+import {
+  exportEstimateStatementToExcel,
+  exportEstimateToCsv,
+  exportEstimateToExcel
+} from "@/lib/estimation/export-estimate";
 import {
   createEstimationSampleData,
   createSampleProjectEstimateStates
 } from "@/lib/estimation/sample-data";
 import {
   buildScheduleCategorySummaries,
+  buildEstimateStatementItems,
   createCandidatesFromPdfText,
   createDrawingFileRecordFromFile,
   createManualStandardMatchOptions,
@@ -40,8 +47,10 @@ import {
   extractPdfTextFromFile,
   getApprovedEstimateCandidates,
   getDrawingFileType,
-  isManualStandardMatchTarget
+  isManualStandardMatchTarget,
+  summarizeEstimateStatementItems
 } from "@/lib/estimation/service";
+import { parseArchitectureUnitPriceWorkbook } from "@/lib/estimation/unit-price-parser";
 import type {
   DrawingFileRecord,
   EstimateItemRecord,
@@ -49,7 +58,8 @@ import type {
   EstimationTabKey,
   PdfTextExtractionResult,
   ProjectEstimateState,
-  ReviewStatus
+  ReviewStatus,
+  UnitPriceRecord
 } from "@/lib/estimation/types";
 
 const tabOptions = [
@@ -66,6 +76,7 @@ const summaryIcons = {
 } as const;
 
 type SummaryCardKey = keyof typeof summaryIcons;
+type UnitPriceParseStatus = "idle" | "parsing" | "success" | "failed";
 
 export function EstimationDashboard() {
   const seed = useMemo(() => createEstimationSampleData(), []);
@@ -77,6 +88,11 @@ export function EstimationDashboard() {
   const [candidates, setCandidates] = useState(() => seed.extractionCandidates);
   const [matches, setMatches] = useState(() => seed.estimateItemMatches);
   const [pdfTextResults, setPdfTextResults] = useState<PdfTextExtractionResult[]>([]);
+  const [unitPrices, setUnitPrices] = useState<UnitPriceRecord[]>([]);
+  const [unitPriceFileName, setUnitPriceFileName] = useState<string | null>(null);
+  const [unitPriceParseStatus, setUnitPriceParseStatus] =
+    useState<UnitPriceParseStatus>("idle");
+  const [unitPriceErrorMessage, setUnitPriceErrorMessage] = useState<string | null>(null);
   const [importedSheetName, setImportedSheetName] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(
     "샘플 도면/적산 데이터가 있는 프로젝트와 도면 데이터가 없는 프로젝트 흐름을 함께 확인할 수 있습니다."
@@ -136,11 +152,23 @@ export function EstimationDashboard() {
     [displayedMatches]
   );
 
-  const estimateItems: EstimateItemRecord[] = deriveEstimateItems({
-    candidates: visibleCandidates,
-    matches: displayedMatches,
-    standardItems: seed.standardItems
-  });
+  const estimateItems = useMemo<EstimateItemRecord[]>(
+    () =>
+      deriveEstimateItems({
+        candidates: visibleCandidates,
+        matches: displayedMatches,
+        standardItems: seed.standardItems
+      }),
+    [displayedMatches, seed.standardItems, visibleCandidates]
+  );
+  const estimateStatementItems = useMemo(
+    () => buildEstimateStatementItems(estimateItems, unitPrices),
+    [estimateItems, unitPrices]
+  );
+  const estimateStatementSummary = useMemo(
+    () => summarizeEstimateStatementItems(estimateStatementItems),
+    [estimateStatementItems]
+  );
   const uploadedPdfPendingMatchCount = displayedMatches.filter(
     (match) =>
       match.matchSource === "uploaded_pdf" &&
@@ -559,6 +587,33 @@ export function EstimationDashboard() {
     );
   };
 
+  const handleUnitPriceUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    const file = files[0];
+    setUnitPriceFileName(file.name);
+    setUnitPriceParseStatus("parsing");
+    setUnitPriceErrorMessage(null);
+
+    try {
+      const records = await parseArchitectureUnitPriceWorkbook(file);
+      setUnitPrices(records);
+      setUnitPriceParseStatus("success");
+      setNotice(
+        `${file.name} 일위대가 ${records.length}건을 읽었습니다. 승인된 물량내역에 단가 매칭을 적용했습니다.`
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "일위대가 Excel 파싱에 실패했습니다.";
+      setUnitPrices([]);
+      setUnitPriceParseStatus("failed");
+      setUnitPriceErrorMessage(message);
+      setNotice(message);
+    }
+  };
+
   const projectFlowMessage = drawingDataExists
     ? "저장된 도면/적산 데이터가 있습니다. 도면 추출 후보와 적산내역을 확인할 수 있습니다."
     : "이 프로젝트에는 아직 도면 데이터가 없습니다. PDF 도면을 업로드하면 적산내역 초안 생성 흐름을 시작할 수 있습니다.";
@@ -714,6 +769,18 @@ export function EstimationDashboard() {
                 items={estimateItems}
                 onExportCsv={() => exportEstimateToCsv(estimateItems)}
                 onExportExcel={() => exportEstimateToExcel(estimateItems)}
+              />
+              <UnitPriceUploadPanel
+                errorMessage={unitPriceErrorMessage}
+                fileName={unitPriceFileName}
+                itemCount={unitPrices.length}
+                onSelectFile={handleUnitPriceUpload}
+                parseStatus={unitPriceParseStatus}
+              />
+              <EstimateStatementTable
+                items={estimateStatementItems}
+                onExportExcel={() => exportEstimateStatementToExcel(estimateStatementItems)}
+                summary={estimateStatementSummary}
               />
             </>
           ) : null}

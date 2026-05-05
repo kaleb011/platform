@@ -4,12 +4,15 @@ import type {
   DrawingFileStatus,
   EstimateItemMatchRecord,
   EstimateItemRecord,
+  EstimateStatementItemRecord,
+  EstimateStatementSummary,
   ManualStandardMatchOption,
   ScheduleCategorySummary,
   ScheduleForecastItemRecord,
   StandardItemKeywordRecord,
   StandardItemRecord,
-  SupportedDrawingFileType
+  SupportedDrawingFileType,
+  UnitPriceRecord
 } from "@/lib/estimation/types";
 export { extractPdfTextFromFile } from "@/lib/estimation/pdf-parser";
 export {
@@ -798,6 +801,172 @@ export function deriveEstimateItems(args: {
 
     return mergeEstimateItems(items, createEstimateItemFromMatch(match, candidate, standardItem));
   }, []);
+}
+
+function normalizeMatchText(value: string): string {
+  return value.replace(/\s+/g, "").toLowerCase();
+}
+
+function getUnitPriceSearchTexts(item: EstimateItemRecord): string[] {
+  return [
+    item.standardItemName,
+    item.itemName,
+    item.specification ?? "",
+    item.calculationBasis ?? ""
+  ].map(normalizeMatchText);
+}
+
+function findUnitPriceByKeywords(
+  item: EstimateItemRecord,
+  unitPrices: UnitPriceRecord[]
+): UnitPriceRecord | undefined {
+  const source = getUnitPriceSearchTexts(item).join(" ");
+  const rules: Array<{ keywords: string[]; unitPriceKeywords: string[] }> = [
+    { keywords: ["아스콘포장", "아스콘"], unitPriceKeywords: ["아스콘포장", "아스콘"] },
+    { keywords: ["보도블럭"], unitPriceKeywords: ["보도블럭"] },
+    { keywords: ["경계석"], unitPriceKeywords: ["경계석"] },
+    { keywords: ["오수관"], unitPriceKeywords: ["오수관"] },
+    { keywords: ["우수관"], unitPriceKeywords: ["우수관"] },
+    { keywords: ["pvc이중벽관", "pvc"], unitPriceKeywords: ["pvc이중벽관", "pvc"] },
+    { keywords: ["빗물받이"], unitPriceKeywords: ["빗물받이"] },
+    { keywords: ["맨홀"], unitPriceKeywords: ["맨홀"] },
+    {
+      keywords: ["단열재", "경질우레탄", "글라스울", "thk"],
+      unitPriceKeywords: ["단열", "경질우레탄", "글라스울"]
+    },
+    { keywords: ["석고보드벽체", "석고보드"], unitPriceKeywords: ["석고보드"] },
+    { keywords: ["방화문"], unitPriceKeywords: ["방화문"] },
+    { keywords: ["우레탄방수", "방수"], unitPriceKeywords: ["우레탄방수", "방수"] },
+    {
+      keywords: ["슬라브", "콘크리트보", "기둥", "콘크리트"],
+      unitPriceKeywords: ["콘크리트", "철근콘크리트"]
+    }
+  ];
+
+  const matchedRule = rules.find((rule) =>
+    rule.keywords.some((keyword) => source.includes(normalizeMatchText(keyword)))
+  );
+
+  if (!matchedRule) {
+    return undefined;
+  }
+
+  return unitPrices.find((unitPrice) => {
+    const unitPriceText = normalizeMatchText(
+      `${unitPrice.itemName} ${unitPrice.specification} ${unitPrice.note ?? ""}`
+    );
+
+    return matchedRule.unitPriceKeywords.some((keyword) =>
+      unitPriceText.includes(normalizeMatchText(keyword))
+    );
+  });
+}
+
+export function matchUnitPriceForEstimateItem(
+  item: EstimateItemRecord,
+  unitPrices: UnitPriceRecord[]
+): UnitPriceRecord | null {
+  const standardItemName = normalizeMatchText(item.standardItemName);
+  const itemName = normalizeMatchText(item.itemName);
+
+  const exactMatch = unitPrices.find(
+    (unitPrice) => normalizeMatchText(unitPrice.itemName) === standardItemName
+  );
+
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const containsMatch = unitPrices.find((unitPrice) => {
+    const unitPriceName = normalizeMatchText(unitPrice.itemName);
+
+    return (
+      Boolean(itemName && unitPriceName.includes(itemName)) ||
+      Boolean(itemName && itemName.includes(unitPriceName)) ||
+      Boolean(standardItemName && unitPriceName.includes(standardItemName)) ||
+      Boolean(standardItemName && standardItemName.includes(unitPriceName))
+    );
+  });
+
+  if (containsMatch) {
+    return containsMatch;
+  }
+
+  return findUnitPriceByKeywords(item, unitPrices) ?? null;
+}
+
+export function buildEstimateStatementItems(
+  estimateItems: EstimateItemRecord[],
+  unitPrices: UnitPriceRecord[]
+): EstimateStatementItemRecord[] {
+  return estimateItems.map((item) => {
+    const matchedUnitPrice = matchUnitPriceForEstimateItem(item, unitPrices);
+    const quantityReviewRequired = item.quantityReviewRequired === true || item.quantity <= 0;
+    const unitPriceMatched = Boolean(matchedUnitPrice);
+    const unitPrice = matchedUnitPrice?.unitPrice ?? 0;
+    const amountReviewRequired =
+      quantityReviewRequired || !unitPriceMatched || unitPrice <= 0 || item.quantity <= 0;
+    const amount = amountReviewRequired ? 0 : item.quantity * unitPrice;
+    const reviewNotes = [
+      item.remark,
+      !unitPriceMatched ? "일위대가 매칭 필요" : null,
+      quantityReviewRequired ? "수량 검토 필요" : null
+    ].filter(Boolean);
+
+    return {
+      id: `statement-${item.id}`,
+      sourceEstimateItemId: item.id,
+      workCategory: item.workCategory,
+      itemName: item.itemName,
+      specification: item.specification ?? "",
+      quantity: item.quantity,
+      unit: item.unit,
+      quantityReviewRequired,
+      unitPriceMatched,
+      unitPriceCode: matchedUnitPrice?.code,
+      unitPriceItemName: matchedUnitPrice?.itemName,
+      unitPriceSpecification: matchedUnitPrice?.specification,
+      materialCost: matchedUnitPrice?.materialCost ?? 0,
+      laborCost: matchedUnitPrice?.laborCost ?? 0,
+      expenseCost: matchedUnitPrice?.expenseCost ?? 0,
+      unitPrice,
+      amount,
+      amountReviewRequired,
+      sourceDrawingNo: item.drawingNo ?? "",
+      sourceDrawingName: item.drawingTitle ?? "",
+      remark: reviewNotes.join(" / ")
+    };
+  });
+}
+
+export function summarizeEstimateStatementItems(
+  statementItems: EstimateStatementItemRecord[]
+): EstimateStatementSummary {
+  return statementItems.reduce<EstimateStatementSummary>(
+    (summary, item) => {
+      summary.totalCount += 1;
+
+      if (item.unitPriceMatched) {
+        summary.matchedCount += 1;
+      }
+
+      if (!item.amountReviewRequired) {
+        summary.amountReadyCount += 1;
+        summary.totalAmount += item.amount;
+      } else {
+        summary.reviewNeededCount += 1;
+      }
+
+      return summary;
+    },
+    {
+      totalCount: 0,
+      matchedCount: 0,
+      amountReadyCount: 0,
+      reviewNeededCount: 0,
+      totalAmount: 0
+    }
+  );
 }
 
 export function buildScheduleCategorySummaries(scheduleItems: ScheduleForecastItemRecord[]) {

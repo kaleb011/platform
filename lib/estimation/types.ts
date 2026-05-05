@@ -188,6 +188,20 @@ export interface ManualStandardMatchOption {
   confidence: number;
 }
 
+export interface UnitPriceRecord {
+  id: string;
+  code: string;
+  itemName: string;
+  specification: string;
+  unit: string;
+  materialCost: number;
+  laborCost: number;
+  expenseCost: number;
+  unitPrice: number;
+  note?: string;
+  source: "uploaded_architecture_unit_price";
+}
+
 export interface EstimateItemRecord {
   id: string;
   projectId?: string | null;
@@ -212,6 +226,38 @@ export interface EstimateItemRecord {
   quantityReviewRequired?: boolean;
   matchSource?: "sample" | "uploaded_pdf" | "manual";
   standardCode?: string | null;
+}
+
+export interface EstimateStatementItemRecord {
+  id: string;
+  sourceEstimateItemId: string;
+  workCategory: string;
+  itemName: string;
+  specification: string;
+  quantity: number;
+  unit: string;
+  quantityReviewRequired: boolean;
+  unitPriceMatched: boolean;
+  unitPriceCode?: string;
+  unitPriceItemName?: string;
+  unitPriceSpecification?: string;
+  materialCost: number;
+  laborCost: number;
+  expenseCost: number;
+  unitPrice: number;
+  amount: number;
+  amountReviewRequired: boolean;
+  sourceDrawingNo?: string;
+  sourceDrawingName?: string;
+  remark?: string;
+}
+
+export interface EstimateStatementSummary {
+  totalCount: number;
+  matchedCount: number;
+  amountReadyCount: number;
+  reviewNeededCount: number;
+  totalAmount: number;
 }
 
 export interface ScheduleForecastItemRecord {

@@ -1,4 +1,8 @@
-import type { EstimateExportRow, EstimateItemRecord } from "@/lib/estimation/types";
+import type {
+  EstimateExportRow,
+  EstimateItemRecord,
+  EstimateStatementItemRecord
+} from "@/lib/estimation/types";
 
 function getExportQuantity(item: EstimateItemRecord): string | number {
   return item.quantityReviewRequired || item.quantity <= 0 ? "검토 필요" : item.quantity;
@@ -141,6 +145,93 @@ export function exportEstimateToExcel(items: EstimateItemRecord[], fileName = "e
         <table border="1">
           <thead>
             <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  downloadBlob(
+    new Blob(["\uFEFF", html], { type: "application/vnd.ms-excel;charset=utf-8;" }),
+    fileName
+  );
+}
+
+function getStatementQuantity(item: EstimateStatementItemRecord): string | number {
+  return item.quantityReviewRequired || item.quantity <= 0 ? "검토 필요" : item.quantity;
+}
+
+function getStatementCurrency(value: number, reviewRequired: boolean): string | number {
+  return reviewRequired ? "검토 필요" : value;
+}
+
+export function exportEstimateStatementToExcel(
+  statementItems: EstimateStatementItemRecord[],
+  fileName = "estimate-statement-items.xls"
+) {
+  const statementHeaders = [
+    "공종",
+    "품명",
+    "규격",
+    "수량",
+    "단위",
+    "재료비",
+    "노무비",
+    "경비",
+    "합계단가",
+    "금액",
+    "일위대가코드",
+    "일위대가항목",
+    "산출근거",
+    "도면번호",
+    "도면명",
+    "검토상태",
+    "비고"
+  ];
+
+  const tableRows = statementItems
+    .map((item) => {
+      const reviewStatus = item.amountReviewRequired ? "검토 필요" : "산출 가능";
+      const calculationBasis = item.unitPriceMatched
+        ? "업로드 일위대가 항목 매칭"
+        : "일위대가 매칭 필요";
+
+      return `
+        <tr>
+          <td>${escapeHtml(item.workCategory)}</td>
+          <td>${escapeHtml(item.itemName)}</td>
+          <td>${escapeHtml(item.specification)}</td>
+          <td>${escapeHtml(getStatementQuantity(item))}</td>
+          <td>${escapeHtml(item.unit || "-")}</td>
+          <td>${escapeHtml(getStatementCurrency(item.materialCost, !item.unitPriceMatched))}</td>
+          <td>${escapeHtml(getStatementCurrency(item.laborCost, !item.unitPriceMatched))}</td>
+          <td>${escapeHtml(getStatementCurrency(item.expenseCost, !item.unitPriceMatched))}</td>
+          <td>${escapeHtml(
+            getStatementCurrency(item.unitPrice, !item.unitPriceMatched || item.unitPrice <= 0)
+          )}</td>
+          <td>${escapeHtml(getStatementCurrency(item.amount, item.amountReviewRequired))}</td>
+          <td>${escapeHtml(item.unitPriceCode ?? "")}</td>
+          <td>${escapeHtml(item.unitPriceItemName ?? "일위대가 매칭 필요")}</td>
+          <td>${escapeHtml(calculationBasis)}</td>
+          <td>${escapeHtml(item.sourceDrawingNo ?? "")}</td>
+          <td>${escapeHtml(item.sourceDrawingName ?? "")}</td>
+          <td>${escapeHtml(reviewStatus)}</td>
+          <td>${escapeHtml(item.remark ?? "")}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const html = `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+      </head>
+      <body>
+        <table border="1">
+          <thead>
+            <tr>${statementHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
           </thead>
           <tbody>${tableRows}</tbody>
         </table>
