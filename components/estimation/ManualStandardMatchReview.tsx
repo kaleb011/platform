@@ -22,6 +22,8 @@ type ManualStandardMatchReviewProps = {
   onChangeStatus: (matchId: string, reviewStatus: ReviewStatus) => void;
 };
 
+const HOLD_OPTION_ID = "__hold_manual_match__";
+
 function getCandidateLabel(candidate: DrawingExtractionCandidateRecord | undefined) {
   if (!candidate) {
     return "-";
@@ -43,6 +45,89 @@ function getSourceLabel(candidate: DrawingExtractionCandidateRecord | undefined)
     .join(" / ");
 }
 
+function getCandidateSearchText(candidate: DrawingExtractionCandidateRecord | undefined) {
+  if (!candidate) {
+    return "";
+  }
+
+  return [
+    candidate.normalizedValue,
+    candidate.extractedText,
+    candidate.sourceTextSnippet,
+    candidate.sourceNote,
+    candidate.drawingTitle
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function includesAny(value: string, keywords: string[]) {
+  return keywords.some((keyword) => value.includes(keyword.toLowerCase()));
+}
+
+function getPreferredOptionIds(candidate: DrawingExtractionCandidateRecord | undefined) {
+  const source = getCandidateSearchText(candidate);
+
+  if (
+    (includesAny(source, ["thk"]) &&
+      !includesAny(source, ["경질우레탄", "글라스울", "단열재", "패널"])) ||
+    (includesAny(source, ["콘크리트"]) &&
+      includesAny(source, ["d900", "d300", "d200"]) &&
+      !includesAny(source, ["철근콘크리트", "슬라브", "기둥", "콘크리트 보"]))
+  ) {
+    return [HOLD_OPTION_ID];
+  }
+
+  if (includesAny(source, ["thk", "경질우레탄", "글라스울", "단열재", "패널"])) {
+    return ["manual-insulation"];
+  }
+
+  if (includesAny(source, ["아스콘", "포장", "보도블럭", "경계석"])) {
+    return ["manual-ascon", "manual-block", "manual-curb"];
+  }
+
+  if (includesAny(source, ["우수관", "오수관", "pvc이중벽관", "빗물받이", "맨홀"])) {
+    return [
+      "manual-rain-pipe",
+      "manual-sewer-pipe",
+      "manual-pvc-pipe",
+      "manual-catch-basin",
+      "manual-manhole"
+    ];
+  }
+
+  if (includesAny(source, ["석고보드", "벽체"])) {
+    return ["manual-gypsum-wall"];
+  }
+
+  if (includesAny(source, ["방화문", "문", "창호"])) {
+    return ["manual-fire-door"];
+  }
+
+  return [];
+}
+
+function getSortedOptions(
+  candidate: DrawingExtractionCandidateRecord | undefined,
+  options: ManualStandardMatchOption[]
+) {
+  const preferredIds = getPreferredOptionIds(candidate);
+
+  if (preferredIds.length === 0) {
+    return options;
+  }
+
+  return [...options].sort((left, right) => {
+    const leftIndex = preferredIds.indexOf(left.id);
+    const rightIndex = preferredIds.indexOf(right.id);
+    const leftRank = leftIndex >= 0 ? leftIndex : Number.MAX_SAFE_INTEGER;
+    const rightRank = rightIndex >= 0 ? rightIndex : Number.MAX_SAFE_INTEGER;
+
+    return leftRank - rightRank;
+  });
+}
+
 export function ManualStandardMatchReview({
   candidates,
   matches,
@@ -50,7 +135,6 @@ export function ManualStandardMatchReview({
   onApproveManualMatch,
   onChangeStatus
 }: ManualStandardMatchReviewProps) {
-  const defaultOptionId = options[0]?.id ?? "";
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const candidateMap = useMemo(
     () => new Map(candidates.map((candidate) => [candidate.id, candidate])),
@@ -83,8 +167,14 @@ export function ManualStandardMatchReview({
       <div className="grid grid-cols-1 gap-3">
         {matches.map((match) => {
           const candidate = candidateMap.get(match.drawingExtractionId);
-          const selectedOptionId = selectedOptions[match.id] ?? defaultOptionId;
-          const selectedOption = options.find((option) => option.id === selectedOptionId);
+          const sortedOptions = getSortedOptions(candidate, options);
+          const preferredIds = getPreferredOptionIds(candidate);
+          const shouldSuggestHold = preferredIds[0] === HOLD_OPTION_ID;
+          const selectedOptionId = selectedOptions[match.id] ?? "";
+          const selectedOption = sortedOptions.find((option) => option.id === selectedOptionId);
+          const canApprove = Boolean(
+            selectedOptionId && selectedOptionId !== HOLD_OPTION_ID && selectedOption
+          );
 
           return (
             <div key={match.id} className="rounded-[18px] bg-white p-4 shadow-sm">
@@ -129,7 +219,10 @@ export function ManualStandardMatchReview({
                 </p>
               ) : null}
 
-              <label className="mt-4 block text-[12px] font-medium text-slate" htmlFor={`manual-${match.id}`}>
+              <label
+                className="mt-4 block text-[12px] font-medium text-slate"
+                htmlFor={`manual-${match.id}`}
+              >
                 추천 표준품셈 후보
               </label>
               <select
@@ -143,7 +236,11 @@ export function ManualStandardMatchReview({
                 }
                 value={selectedOptionId}
               >
-                {options.map((option) => (
+                <option value="">표준품셈 항목 선택</option>
+                {shouldSuggestHold ? (
+                  <option value={HOLD_OPTION_ID}>품셈 매칭 보류</option>
+                ) : null}
+                {sortedOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label} · {option.workCategory}
                   </option>
@@ -154,13 +251,23 @@ export function ManualStandardMatchReview({
                 <p className="mt-2 text-[12px] leading-5 text-slate">
                   {selectedOption.standardItemName} / {selectedOption.workCategory} / {selectedOption.unit}
                 </p>
+              ) : selectedOptionId === HOLD_OPTION_ID ? (
+                <p className="mt-2 text-[12px] leading-5 text-slate">
+                  이 항목은 자동 확정하지 않고 보류합니다. 필요하면 아래 보류 버튼을 사용하세요.
+                </p>
               ) : null}
 
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <Button
                   className="min-h-[38px] rounded-[14px] px-3 text-[12px]"
-                  disabled={!selectedOptionId}
-                  onClick={() => onApproveManualMatch(match.id, selectedOptionId)}
+                  disabled={!canApprove}
+                  onClick={() => {
+                    if (!canApprove) {
+                      return;
+                    }
+
+                    onApproveManualMatch(match.id, selectedOptionId);
+                  }}
                   type="button"
                   variant="secondary"
                 >
