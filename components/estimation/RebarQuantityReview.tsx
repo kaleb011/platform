@@ -13,6 +13,7 @@ import {
   summarizeRebarQuantityCandidates
 } from "@/lib/estimation/rebar-quantity";
 import type {
+  DrawingSheetIndexRecord,
   RebarMemberType,
   RebarPosition,
   RebarQuantityCandidateRecord,
@@ -21,6 +22,7 @@ import type {
 
 type RebarQuantityReviewProps = {
   candidates: RebarQuantityCandidateRecord[];
+  drawingSheets?: DrawingSheetIndexRecord[];
   onChangeCandidate: (candidateId: string, updates: Partial<RebarQuantityCandidateRecord>) => void;
   onChangeStatus: (candidateId: string, reviewStatus: RebarReviewStatus) => void;
   onExportExcel?: () => void;
@@ -108,13 +110,24 @@ function numberInputProps(
 
 function RebarCandidateCard({
   candidate,
+  drawingSheets = [],
   onChangeCandidate,
   onChangeStatus
 }: {
   candidate: RebarQuantityCandidateRecord;
+  drawingSheets?: DrawingSheetIndexRecord[];
   onChangeCandidate: (candidateId: string, updates: Partial<RebarQuantityCandidateRecord>) => void;
   onChangeStatus: (candidateId: string, reviewStatus: RebarReviewStatus) => void;
 }) {
+  const sourceSheet = drawingSheets.find(
+    (sheet) =>
+      sheet.sourcePage === candidate.sourcePage &&
+      (!candidate.sourceFileName || sheet.sourceFileName === candidate.sourceFileName)
+  );
+  const sourceLabel = sourceSheet
+    ? `${sourceSheet.drawingNo ?? "도면번호 검토"} ${sourceSheet.drawingTitle ?? "도면명 검토"} / p.${sourceSheet.sourcePage}`
+    : `${candidate.sourceFileName ?? "-"} ${candidate.sourcePage ? `/ p.${candidate.sourcePage}` : ""}`;
+
   return (
     <div className="rounded-[20px] border border-border bg-white px-4 py-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -258,7 +271,7 @@ function RebarCandidateCard({
         </p>
       ) : null}
       <p className="mt-2 text-[11px] text-slate">
-        {candidate.sourceFileName ?? "-"} {candidate.sourcePage ? `/ p.${candidate.sourcePage}` : ""}
+        출처: {sourceLabel}
       </p>
 
       <div className="mt-4 grid grid-cols-3 gap-2">
@@ -293,6 +306,7 @@ function RebarCandidateCard({
 
 export function RebarQuantityReview({
   candidates,
+  drawingSheets,
   onChangeCandidate,
   onChangeStatus,
   onExportExcel
@@ -367,6 +381,7 @@ export function RebarQuantityReview({
           <RebarCandidateCard
             key={candidate.id}
             candidate={candidate}
+            drawingSheets={drawingSheets}
             onChangeCandidate={onChangeCandidate}
             onChangeStatus={onChangeStatus}
           />

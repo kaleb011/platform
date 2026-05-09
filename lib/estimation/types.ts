@@ -64,6 +64,41 @@ export type RebarPosition =
 
 export type RebarReviewStatus = "pending" | "accepted" | "rejected";
 
+export type DrawingDiscipline =
+  | "architecture"
+  | "structure"
+  | "rebar_concrete"
+  | "steel"
+  | "finish"
+  | "window_door"
+  | "waterproof"
+  | "civil_drainage"
+  | "mechanical"
+  | "electrical"
+  | "unknown";
+
+export type DrawingSheetType =
+  | "drawing_list"
+  | "architectural_plan"
+  | "structural_plan"
+  | "structural_schedule"
+  | "section"
+  | "elevation"
+  | "detail"
+  | "finish_schedule"
+  | "window_door_schedule"
+  | "legend"
+  | "quantity_table"
+  | "general_note"
+  | "unknown";
+
+export type QuantityReadinessStatus =
+  | "direct_table_available"
+  | "schedule_based_calculation"
+  | "plan_link_required"
+  | "image_geometry_required"
+  | "review_required";
+
 export interface DrawingFileRecord {
   id: string;
   projectId?: string | null;
@@ -317,6 +352,52 @@ export interface RebarQuantitySummary {
   acceptedCandidates: number;
   totalKg: number;
   totalTon: number;
+}
+
+export interface DrawingSheetIndexRecord {
+  id: string;
+  sourcePage: number;
+  sourceFileName?: string;
+  drawingNo?: string;
+  drawingTitle?: string;
+  discipline: DrawingDiscipline;
+  sheetType: DrawingSheetType;
+  floor?: string;
+  scale?: string;
+  detectedKeywords: string[];
+  quantityReadinessStatus: QuantityReadinessStatus;
+  quantityReadinessReason: string;
+  relatedSheetIds: string[];
+  confidence: number;
+  sourceTextSnippet?: string;
+}
+
+export interface DrawingReferenceRecord {
+  id: string;
+  fromSheetId: string;
+  toSheetId: string;
+  relationType:
+    | "plan_to_schedule"
+    | "plan_to_legend"
+    | "schedule_to_quantity"
+    | "symbol_to_schedule"
+    | "floor_related"
+    | "same_discipline"
+    | "unknown";
+  reason: string;
+  confidence: number;
+}
+
+export interface DrawingQuantityRoadmapRecord {
+  id: string;
+  discipline: DrawingDiscipline;
+  workCategory: string;
+  targetQuantity: string;
+  requiredSheets: string[];
+  availableSheets: string[];
+  missingData: string[];
+  nextAction: string;
+  readiness: QuantityReadinessStatus;
 }
 
 export interface EstimateStatementItemRecord {

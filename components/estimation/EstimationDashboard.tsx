@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { DrawingExtractionTable } from "@/components/estimation/DrawingExtractionTable";
+import { DrawingIntelligencePanel } from "@/components/estimation/DrawingIntelligencePanel";
 import { DrawingUploadPanel } from "@/components/estimation/DrawingUploadPanel";
 import { EstimateItemsTable } from "@/components/estimation/EstimateItemsTable";
 import { EstimateStatementTable } from "@/components/estimation/EstimateStatementTable";
@@ -28,6 +29,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import {
+  attachDrawingReferencesToSheets,
+  buildDrawingReferences,
+  buildQuantityRoadmap,
+  extractDrawingSheetIndexesFromPdfResults
+} from "@/lib/estimation/drawing-intelligence";
 import {
   exportEstimateStatementToExcel,
   exportEstimateToCsv,
@@ -172,6 +179,22 @@ export function EstimationDashboard() {
         candidate.sourceFileName ? activePdfFileNames.has(candidate.sourceFileName) : true
       ),
     [activePdfFileNames, rebarCandidates]
+  );
+  const rawDrawingSheetIndexes = useMemo(
+    () => extractDrawingSheetIndexesFromPdfResults(activePdfTextResults),
+    [activePdfTextResults]
+  );
+  const drawingReferences = useMemo(
+    () => buildDrawingReferences(rawDrawingSheetIndexes),
+    [rawDrawingSheetIndexes]
+  );
+  const drawingSheetIndexes = useMemo(
+    () => attachDrawingReferencesToSheets(rawDrawingSheetIndexes, drawingReferences),
+    [drawingReferences, rawDrawingSheetIndexes]
+  );
+  const quantityRoadmaps = useMemo(
+    () => buildQuantityRoadmap(drawingSheetIndexes),
+    [drawingSheetIndexes]
   );
   const standardEstimateItems = useMemo<EstimateItemRecord[]>(
     () =>
@@ -688,13 +711,13 @@ export function EstimationDashboard() {
       <Card className="section-enter bg-[#f6fbf7]">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[12px] font-semibold text-primary">적산 파트 MVP 업데이트</p>
+            <p className="text-[12px] font-semibold text-primary">도면 기반 적산 보조</p>
             <h2 className="mt-2 text-[20px] font-bold tracking-[-0.03em] text-foreground">
-              프로젝트별 도면 데이터 상태와 업로드 흐름
+              도면 업로드부터 일위대가 적용까지 한 화면에서 확인
             </h2>
             <p className="mt-2 text-[13px] leading-6 text-slate">
-              이번 단계는 실제 AI 분석이 아니라 프로젝트 선택, 도면 데이터 유무 확인, PDF/이미지 업로드
-              메타데이터 반영, 이후 Supabase와 PDF/IFC 파이프라인으로 이어질 구조를 준비합니다.
+              PDF 도면을 업로드하고 후보 검수, 철근 수량 산출 후보, 표준품셈 매칭,
+              일위대가 적용 결과를 순서대로 확인할 수 있습니다.
             </p>
           </div>
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] bg-primary/10 text-primary">
@@ -778,11 +801,17 @@ export function EstimationDashboard() {
           />
           <UploadedDrawingFilesTable drawingFiles={drawingFiles} />
           <PdfTextExtractionSummary results={activePdfTextResults} />
+          <DrawingIntelligencePanel
+            references={drawingReferences}
+            roadmaps={quantityRoadmaps}
+            sheets={drawingSheetIndexes}
+          />
 
           {drawingDataExists ? (
             <>
               <RebarQuantityReview
                 candidates={activeRebarCandidates}
+                drawingSheets={drawingSheetIndexes}
                 onChangeCandidate={handleRebarCandidateChange}
                 onChangeStatus={handleRebarCandidateStatusChange}
                 onExportExcel={() => exportRebarQuantityCandidatesToExcel(activeRebarCandidates)}
