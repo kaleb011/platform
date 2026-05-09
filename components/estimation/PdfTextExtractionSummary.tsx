@@ -34,7 +34,7 @@ export function PdfTextExtractionSummary({ results }: PdfTextExtractionSummaryPr
         action={<Badge tone={results.length > 0 ? "green" : "gray"}>{results.length}개 PDF</Badge>}
       />
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3">
         <div className="rounded-[18px] bg-[#f8fbf9] p-4">
           <p className="text-[12px] font-semibold text-slate">전체 페이지</p>
           <p className="mt-2 text-[22px] font-bold text-foreground">{pageCount}</p>
@@ -89,7 +89,7 @@ export function PdfTextExtractionSummary({ results }: PdfTextExtractionSummaryPr
                       ? "상세 오류 보기"
                       : "상세 로그 보기"}
                   </summary>
-                  <p className="mt-1 break-words">Debug: {result.debugMessage}</p>
+                  <p className="mt-1 break-words">처리 로그: {result.debugMessage}</p>
                 </details>
               ) : null}
               <div className="mt-3 space-y-2">

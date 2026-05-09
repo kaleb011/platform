@@ -81,7 +81,7 @@ export function UploadedDrawingFilesTable({ drawingFiles }: UploadedDrawingFiles
     <Card className="section-enter">
       <SectionHeading
         title="업로드된 도면 목록"
-        description="이번 단계에서는 파일 메타데이터와 처리 대기 상태만 로컬 상태로 관리합니다."
+        description="업로드한 도면의 파일 정보, 페이지 확인 상태, 다음 분석 작업을 확인합니다."
         action={<Badge tone="blue">{drawingFiles.length}건</Badge>}
       />
 
@@ -117,7 +117,7 @@ export function UploadedDrawingFilesTable({ drawingFiles }: UploadedDrawingFiles
                     {file.debugMessage ? (
                       <details className="mt-2 text-[11px] font-normal leading-4 text-[#7a4a05]">
                         <summary className="cursor-pointer font-semibold">상세 로그 보기</summary>
-                        <p className="mt-1 break-words">Debug: {file.debugMessage}</p>
+                        <p className="mt-1 break-words">처리 로그: {file.debugMessage}</p>
                       </details>
                     ) : null}
                   </td>

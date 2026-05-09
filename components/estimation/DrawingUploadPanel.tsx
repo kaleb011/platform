@@ -26,7 +26,7 @@ export function DrawingUploadPanel({
             ? "저장된 도면 데이터에 새 PDF/이미지 도면을 추가할 수 있습니다."
             : "도면 데이터가 없는 프로젝트입니다. PDF 도면을 업로드해 적산내역 초안 생성 흐름을 시작하세요."
         }
-        action={<Badge tone="blue">LOCAL MVP</Badge>}
+        action={<Badge tone="blue">로컬 처리</Badge>}
       />
 
       <div className="rounded-[22px] border border-dashed border-primary/30 bg-primary/5 p-4">
@@ -39,8 +39,8 @@ export function DrawingUploadPanel({
               도면 선택 &gt; 파일 메타데이터 생성 &gt; 업로드 목록 반영
             </p>
             <p className="mt-1 text-[12px] leading-5 text-slate">
-              이번 단계에서는 실제 PDF 분석이나 PNG 변환 없이 파일명, 형식, 크기, 업로드 시간,
-              처리 상태를 UI 상태에 반영합니다.
+              파일명, 형식, 크기, 업로드 시간과 처리 상태를 먼저 확인하고 이후 도면 분석 흐름으로
+              연결합니다.
             </p>
             <label className="mt-3 inline-flex cursor-pointer">
               <input
@@ -61,7 +61,7 @@ export function DrawingUploadPanel({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-3">
         <div className="rounded-[20px] bg-[#f8fbf9] p-4">
           <div className="flex items-center gap-2 text-[12px] font-semibold text-slate">
             <FileArchive className="h-4 w-4 text-primary" />
@@ -72,7 +72,7 @@ export function DrawingUploadPanel({
         <div className="rounded-[20px] bg-[#f8fbf9] p-4">
           <div className="flex items-center gap-2 text-[12px] font-semibold text-slate">
             <FileImage className="h-4 w-4 text-primary" />
-            이번 단계 상태
+            처리 상태
           </div>
           <p className="mt-2 text-[13px] font-semibold text-foreground">
             PDF는 PNG 변환 대기, 이미지는 분석 대기로 표시

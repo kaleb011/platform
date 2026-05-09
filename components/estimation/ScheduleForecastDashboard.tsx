@@ -51,8 +51,8 @@ export function ScheduleForecastDashboard({
       <Card className="section-enter">
         <SectionHeading
           title="적산내역 업로드 또는 불러오기"
-          description="이번 MVP에서는 업로드 UI를 제공하고, 샘플 forecast 데이터로 공정 흐름을 확인합니다."
-          action={<Badge tone="blue">FORECAST MVP</Badge>}
+          description="승인된 물량내역 또는 스프레드시트를 기준으로 예상 공정 흐름을 확인합니다."
+          action={<Badge tone="blue">공정 초안</Badge>}
         />
 
         <div className="rounded-[22px] border border-dashed border-primary/30 bg-primary/5 p-4">

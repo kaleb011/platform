@@ -9,8 +9,8 @@ export function IfcExpansionNotice() {
     <Card className="section-enter">
       <SectionHeading
         title="BIM / IFC 확장 방향"
-        description="현재 MVP는 PDF 기반 적산 데이터 흐름을 먼저 안정화하고, 이후 IFC 기반 물량 추출 서비스로 확장합니다."
-        action={<Badge tone="blue">IFC TODO</Badge>}
+        description="PDF 기반 적산 데이터 흐름을 우선 활용하고, 이후 IFC 기반 물량 추출 서비스로 확장합니다."
+        action={<Badge tone="blue">IFC 확장</Badge>}
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

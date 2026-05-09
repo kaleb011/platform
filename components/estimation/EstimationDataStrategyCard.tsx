@@ -20,7 +20,7 @@ export function EstimationDataStrategyCard() {
       <SectionHeading
         title="Supabase 저장 전략"
         description="무료 플랜 용량을 고려해 원본 파일보다 대시보드에 필요한 정제 데이터를 우선 저장합니다."
-        action={<Badge tone="gray">TODO: DB CRUD</Badge>}
+        action={<Badge tone="gray">저장 전략</Badge>}
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -55,8 +55,8 @@ export function EstimationDataStrategyCard() {
 
       <div className="mt-3 flex items-start gap-2 rounded-[18px] bg-white px-4 py-3 text-[12px] leading-5 text-slate">
         <TableProperties className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-        이번 단계에서는 실제 저장을 수행하지 않고, service TODO를 통해 Supabase Storage 및 DB 저장
-        파이프라인을 연결할 자리를 남겨둡니다.
+        현재 화면은 로컬 검수 흐름을 우선 제공하며, 이후 Supabase Storage 및 DB 저장 파이프라인으로
+        연결할 수 있도록 정제 데이터 구조를 유지합니다.
       </div>
     </Card>
   );

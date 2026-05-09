@@ -3,11 +3,14 @@
 import { useMemo, useState } from "react";
 import {
   BarChart3,
+  Bell,
   CheckCircle2,
+  Database,
   FileSearch,
   Layers3,
   LoaderCircle,
-  Sparkles
+  Sparkles,
+  UserRound
 } from "lucide-react";
 
 import { DrawingExtractionTable } from "@/components/estimation/DrawingExtractionTable";
@@ -25,7 +28,6 @@ import { StandardMatchTable } from "@/components/estimation/StandardMatchTable";
 import { UnitPriceUploadPanel } from "@/components/estimation/UnitPriceUploadPanel";
 import { UploadedDrawingFilesTable } from "@/components/estimation/UploadedDrawingFilesTable";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
@@ -86,9 +88,12 @@ const tabOptions = [
 
 const summaryIcons = {
   uploaded: Layers3,
-  converted: LoaderCircle,
+  extracted: LoaderCircle,
+  indexed: FileSearch,
+  rebar: BarChart3,
   candidates: FileSearch,
   approved: CheckCircle2,
+  amountReady: Database,
   matchingNeeded: BarChart3
 } as const;
 
@@ -243,17 +248,12 @@ export function EstimationDashboard() {
     (item) => item.status !== "linked"
   );
 
-  const matchingNeededCount = visibleCandidates.filter(
-    (candidate) => candidate.reviewStatus === "needs_standard_match"
-  ).length;
-
-  const convertedPageCount = drawingFiles.reduce((count, file) => {
-    if (file.status === "converted" || file.status === "analyzed") {
-      return count + (file.pageCount ?? 0);
-    }
-
-    return count;
-  }, 0);
+  const extractedSuccessPageCount = activePdfTextResults.reduce(
+    (count, result) =>
+      count +
+      result.pages.filter((page) => page.extractionStatus === "success").length,
+    0
+  );
 
   const summaryCards: Array<{
     key: SummaryCardKey;
@@ -270,31 +270,38 @@ export function EstimationDashboard() {
       tone: "blue"
     },
     {
-      key: "converted",
-      label: "변환 완료 페이지 수",
-      value: `${convertedPageCount}`,
-      footnote: "이번 단계의 신규 업로드는 변환 대기 상태로 유지",
+      key: "extracted",
+      label: "추출 성공 페이지",
+      value: `${extractedSuccessPageCount}`,
+      footnote: "PDF 텍스트를 읽어 도면 데이터로 활용 가능한 페이지",
       tone: "green"
     },
     {
-      key: "candidates",
-      label: "추출 후보 수",
-      value: `${visibleCandidates.length}`,
-      footnote: "sample data 후보와 업로드 PDF 후보 합산",
+      key: "indexed",
+      label: "도면 인덱스 수",
+      value: `${drawingSheetIndexes.length}`,
+      footnote: "도면번호, 공종, 층, 도면종류가 분류된 페이지",
       tone: "blue"
     },
     {
-      key: "matchingNeeded",
-      label: "품셈 매칭 필요 항목 수",
-      value: `${matchingNeededCount}`,
-      footnote: "자동 확정되지 않은 후보 상태 표시",
+      key: "rebar",
+      label: "철근 수량 후보",
+      value: `${activeRebarCandidates.length}`,
+      footnote: "구조일람표 기반 산출 후보와 검토 대상",
       tone: "amber"
     },
     {
       key: "approved",
-      label: "승인된 적산 항목 수",
+      label: "승인 물량내역",
       value: `${estimateItems.length}`,
       footnote: "승인 또는 수정 승인된 항목만 반영",
+      tone: "green"
+    },
+    {
+      key: "amountReady",
+      label: "금액 산출 가능",
+      value: `${estimateStatementSummary.calculatedCount}`,
+      footnote: "일위대가와 수량 검토가 완료되어 금액 산출 가능한 항목",
       tone: "green"
     }
   ];
@@ -671,7 +678,7 @@ export function EstimationDashboard() {
     const file = files[0];
     setImportedSheetName(file.name);
     setNotice(
-      `${file.name} 파일이 선택되었습니다. 현재 MVP에서는 파일명만 표시하고, forecast 데이터는 샘플 세트를 사용합니다.`
+      `${file.name} 파일이 선택되었습니다. 현재 화면에서는 파일명을 표시하고 예시 공정 데이터와 함께 흐름을 확인합니다.`
     );
   };
 
@@ -702,194 +709,238 @@ export function EstimationDashboard() {
     }
   };
 
+  const handleProjectChange = (projectId: string) => {
+    const nextProject = projectStates.find((project) => project.projectId === projectId);
+
+    setSelectedProjectId(projectId);
+    setNotice(
+      nextProject?.drawingDataStatus === "exists"
+        ? "저장된 도면/적산 데이터가 있습니다. 도면 추출 후보와 적산내역을 확인할 수 있습니다."
+        : "이 프로젝트에는 아직 도면 데이터가 없습니다. PDF 도면을 업로드하면 적산내역 초안 생성 흐름을 시작할 수 있습니다."
+    );
+  };
+
   const projectFlowMessage = drawingDataExists
     ? "저장된 도면/적산 데이터가 있습니다. 도면 추출 후보와 적산내역을 확인할 수 있습니다."
     : "이 프로젝트에는 아직 도면 데이터가 없습니다. PDF 도면을 업로드하면 적산내역 초안 생성 흐름을 시작할 수 있습니다.";
 
   return (
-    <div className="space-y-4">
-      <Card className="section-enter bg-[#f6fbf7]">
-        <div className="flex items-start justify-between gap-3">
+    <div className="relative left-1/2 w-[min(calc(100vw-2rem),80rem)] -translate-x-1/2 bg-[#f5f7fb] px-3 py-5 text-foreground sm:px-5 lg:px-6">
+      <header className="mb-6 rounded-[20px] border border-border bg-white px-4 py-4 shadow-sm lg:px-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate">
+              Business Site Console
+            </p>
+            <h1 className="mt-1 text-[22px] font-bold tracking-[-0.03em] text-foreground">
+              현장 관리 플랫폼
+            </h1>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <label className="flex flex-col gap-1 text-[12px] font-semibold text-slate">
+              프로젝트
+              <select
+                className="h-10 min-w-[220px] rounded-[10px] border border-border bg-white px-3 text-[13px] font-semibold text-foreground outline-none transition focus:border-primary"
+                onChange={(event) => handleProjectChange(event.target.value)}
+                value={activeProject.projectId}
+              >
+                {projectStates.map((project) => (
+                  <option key={project.projectId} value={project.projectId}>
+                    {project.projectName}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={drawingDataExists ? "green" : "amber"}>
+                {drawingDataExists ? "DB 연결 준비됨" : "도면 업로드 필요"}
+              </Badge>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-[#f8fafc] px-3 py-2 text-[12px] font-semibold text-slate">
+                <UserRound className="h-3.5 w-3.5" />
+                {activeProject.projectName}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-[#f8fafc] px-3 py-2 text-[12px] font-semibold text-slate">
+                <Bell className="h-3.5 w-3.5" />
+                상태 알림 2
+              </span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section className="mb-6 rounded-[22px] border border-border bg-white px-5 py-5 shadow-sm lg:px-7">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
             <p className="text-[12px] font-semibold text-primary">도면 기반 적산 보조</p>
-            <h2 className="mt-2 text-[20px] font-bold tracking-[-0.03em] text-foreground">
-              도면 업로드부터 일위대가 적용까지 한 화면에서 확인
+            <h2 className="mt-2 text-[28px] font-bold tracking-[-0.04em] text-foreground">
+              적산내역 보조
             </h2>
-            <p className="mt-2 text-[13px] leading-6 text-slate">
-              PDF 도면을 업로드하고 후보 검수, 철근 수량 산출 후보, 표준품셈 매칭,
-              일위대가 적용 결과를 순서대로 확인할 수 있습니다.
+            <p className="mt-2 text-[14px] leading-6 text-slate">
+              도면 PDF에서 수량 후보를 추출하고, 검토된 항목에 표준품셈과 일위대가를
+              적용해 적산내역서 초안을 생성합니다.
             </p>
           </div>
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] bg-primary/10 text-primary">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-primary/10 text-primary">
             <Sparkles className="h-5 w-5" />
           </div>
         </div>
-      </Card>
 
-      <Card className="section-enter">
-        <SectionHeading
-          title="프로젝트 선택"
-          description="샘플 프로젝트 상태로 도면 데이터가 있는 흐름과 없는 흐름을 확인합니다."
-          action={
-            <Badge tone={drawingDataExists ? "green" : "amber"}>
-              {drawingDataExists ? "도면 데이터 있음" : "도면 데이터 없음"}
-            </Badge>
-          }
-        />
-        <div className="flex flex-wrap gap-2">
-          {projectStates.map((project) => {
-            const selected = project.projectId === activeProject.projectId;
-
-            return (
-              <Button
-                key={project.projectId}
-                className="min-h-[42px] rounded-[16px] px-4 text-[13px]"
-                onClick={() => {
-                  setSelectedProjectId(project.projectId);
-                  setNotice(
-                    project.drawingDataStatus === "exists"
-                      ? "저장된 도면/적산 데이터가 있습니다. 도면 추출 후보와 적산내역을 확인할 수 있습니다."
-                      : "이 프로젝트에는 아직 도면 데이터가 없습니다. PDF 도면을 업로드하면 적산내역 초안 생성 흐름을 시작할 수 있습니다."
-                  );
-                }}
-                type="button"
-                variant={selected ? "primary" : "secondary"}
-              >
-                {project.projectName}
-              </Button>
-            );
-          })}
-        </div>
-        <div className="mt-3 rounded-[18px] bg-[#f8fbf9] px-4 py-3 text-[12px] leading-5 text-slate">
+        <div className="mt-5 rounded-[14px] border border-border bg-[#f8fafc] px-4 py-3 text-[13px] leading-5 text-slate">
+          <span className="font-semibold text-foreground">도면 업로드 및 분석 상태: </span>
           {projectFlowMessage}
         </div>
-      </Card>
+      </section>
 
-      <Card className="section-enter">
-        <SectionHeading
-          title="적산 파트"
-          description="두 탭 전환으로 도면 기반 적산과 예상공정 대시보드를 확인합니다."
-        />
-        <SegmentedTabs options={tabOptions} value={activeTab} onChange={setActiveTab} />
+      <section className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        {summaryCards.map((card) => {
+          const Icon = summaryIcons[card.key];
+
+          return (
+            <Card key={card.key} className="bg-white shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[#eef6f1] text-primary">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <Badge tone={card.tone}>{card.value}</Badge>
+              </div>
+              <p className="mt-4 text-[12px] font-semibold text-foreground">{card.label}</p>
+              <p className="mt-2 text-[11px] leading-4 text-slate">{card.footnote}</p>
+            </Card>
+          );
+        })}
+      </section>
+
+      <Card className="mb-6 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <SectionHeading
+            title="업무 영역"
+            description="도면 기반 적산과 예상공정 대시보드를 전환해 확인합니다."
+          />
+          <div className="min-w-0 lg:min-w-[420px]">
+            <SegmentedTabs options={tabOptions} value={activeTab} onChange={setActiveTab} />
+          </div>
+        </div>
       </Card>
 
       {activeTab === "drawing-estimate" ? (
         <>
-          <section className="grid grid-cols-2 gap-3 section-enter">
-            {summaryCards.map((card) => {
-              const Icon = summaryIcons[card.key];
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+            <aside className="space-y-5 lg:col-span-4">
+              <DrawingUploadPanel
+                drawingDataExists={drawingDataExists}
+                notice={notice}
+                onSelectFiles={handleDrawingUpload}
+              />
+              <UploadedDrawingFilesTable drawingFiles={drawingFiles} />
+              <PdfTextExtractionSummary results={activePdfTextResults} />
+              <DrawingIntelligencePanel
+                references={drawingReferences}
+                roadmaps={quantityRoadmaps}
+                sheets={drawingSheetIndexes}
+              />
+            </aside>
 
-              return (
-                <Card key={card.key} className="bg-[#f8fbf9]">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-primary/10 text-primary">
-                      <Icon className="h-5 w-5" />
+            <main className="space-y-5 lg:col-span-8">
+              {drawingDataExists ? (
+                <>
+                  <RebarQuantityReview
+                    candidates={activeRebarCandidates}
+                    drawingSheets={drawingSheetIndexes}
+                    onChangeCandidate={handleRebarCandidateChange}
+                    onChangeStatus={handleRebarCandidateStatusChange}
+                    onExportExcel={() => exportRebarQuantityCandidatesToExcel(activeRebarCandidates)}
+                  />
+                  <DrawingExtractionTable
+                    candidates={visibleCandidates}
+                    onChangeStatus={handleCandidateStatusChange}
+                  />
+                  <Card className="bg-white shadow-sm">
+                    <SectionHeading
+                      title="승인 후보 연결 상태"
+                      description="승인된 적산 후보는 표준품셈 후보 매칭 영역에서 한 번 더 검토한 뒤 승인된 적산내역에 반영됩니다."
+                    />
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                      <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
+                        <p className="text-[11px] font-medium text-slate">승인된 적산 후보</p>
+                        <p className="mt-1 text-[18px] font-bold text-foreground">
+                          {approvedEstimateCandidates.length}
+                        </p>
+                      </div>
+                      <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
+                        <p className="text-[11px] font-medium text-slate">표준품셈 매칭 대기</p>
+                        <p className="mt-1 text-[18px] font-bold text-foreground">
+                          {uploadedPdfPendingMatchCount}
+                        </p>
+                      </div>
+                      <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
+                        <p className="text-[11px] font-medium text-slate">표준품셈 매칭 승인</p>
+                        <p className="mt-1 text-[18px] font-bold text-foreground">
+                          {uploadedPdfAcceptedMatchCount}
+                        </p>
+                      </div>
+                      <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
+                        <p className="text-[11px] font-medium text-slate">적산내역 반영</p>
+                        <p className="mt-1 text-[18px] font-bold text-foreground">
+                          {reflectedUploadedPdfEstimateCount}
+                        </p>
+                      </div>
                     </div>
-                    <Badge tone={card.tone}>{card.value}</Badge>
+                  </Card>
+                  <StandardMatchTable
+                    candidates={visibleCandidates}
+                    matches={automaticReviewMatches}
+                    onChangeStatus={handleMatchStatusChange}
+                    standardItems={seed.standardItems}
+                  />
+                  <ManualStandardMatchReview
+                    candidates={visibleCandidates}
+                    matches={manualReviewMatches}
+                    onApproveManualMatch={handleManualMatchApprove}
+                    onChangeStatus={handleManualMatchReviewStatusChange}
+                    options={manualMatchOptions}
+                  />
+                  <EstimateItemsTable
+                    items={estimateItems}
+                    onExportCsv={() => exportEstimateToCsv(estimateItems)}
+                    onExportExcel={() => exportEstimateToExcel(estimateItems)}
+                  />
+                  <UnitPriceUploadPanel
+                    errorMessage={unitPriceErrorMessage}
+                    fileName={unitPriceFileName}
+                    itemCount={unitPrices.length}
+                    onSelectFile={handleUnitPriceUpload}
+                    parseStatus={unitPriceParseStatus}
+                  />
+                  <EstimateStatementTable
+                    items={estimateStatementItems}
+                    onExportExcel={() => exportEstimateStatementToExcel(estimateStatementItems)}
+                    summary={estimateStatementSummary}
+                  />
+                </>
+              ) : (
+                <Card className="bg-white shadow-sm">
+                  <SectionHeading
+                    title="도면 업로드 대기"
+                    description="PDF 도면을 업로드하면 도면 인덱스, 후보 검수, 표준품셈 매칭, 일위대가 적용 흐름이 이 영역에 표시됩니다."
+                  />
+                  <div className="rounded-[14px] border border-dashed border-border bg-[#f8fafc] px-4 py-6 text-[13px] leading-6 text-slate">
+                    이 프로젝트에는 아직 도면 데이터가 없습니다. 왼쪽 업로드 패널에서 PDF 도면을
+                    선택해 적산내역 초안 생성 흐름을 시작하세요.
                   </div>
-                  <p className="mt-4 text-[12px] font-medium text-slate">{card.label}</p>
-                  <p className="mt-2 text-[12px] leading-5 text-slate">{card.footnote}</p>
                 </Card>
-              );
-            })}
+              )}
+            </main>
+          </div>
+
+          <section className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <EstimationDataStrategyCard />
+            <IfcExpansionNotice />
           </section>
-
-          <DrawingUploadPanel
-            drawingDataExists={drawingDataExists}
-            notice={notice}
-            onSelectFiles={handleDrawingUpload}
-          />
-          <UploadedDrawingFilesTable drawingFiles={drawingFiles} />
-          <PdfTextExtractionSummary results={activePdfTextResults} />
-          <DrawingIntelligencePanel
-            references={drawingReferences}
-            roadmaps={quantityRoadmaps}
-            sheets={drawingSheetIndexes}
-          />
-
-          {drawingDataExists ? (
-            <>
-              <RebarQuantityReview
-                candidates={activeRebarCandidates}
-                drawingSheets={drawingSheetIndexes}
-                onChangeCandidate={handleRebarCandidateChange}
-                onChangeStatus={handleRebarCandidateStatusChange}
-                onExportExcel={() => exportRebarQuantityCandidatesToExcel(activeRebarCandidates)}
-              />
-              <DrawingExtractionTable
-                candidates={visibleCandidates}
-                onChangeStatus={handleCandidateStatusChange}
-              />
-              <Card className="section-enter bg-[#f8fbf9]">
-                <SectionHeading
-                  title="승인 후보 연결 상태"
-                  description="승인된 적산 후보는 아래 표준품셈 후보 매칭 영역에서 한 번 더 검토한 뒤 승인된 적산내역에 반영됩니다."
-                />
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-[16px] bg-white px-3 py-3">
-                    <p className="text-[11px] font-medium text-slate">승인된 적산 후보</p>
-                    <p className="mt-1 text-[18px] font-bold text-foreground">
-                      {approvedEstimateCandidates.length}
-                    </p>
-                  </div>
-                  <div className="rounded-[16px] bg-white px-3 py-3">
-                    <p className="text-[11px] font-medium text-slate">표준품셈 매칭 대기</p>
-                    <p className="mt-1 text-[18px] font-bold text-foreground">
-                      {uploadedPdfPendingMatchCount}
-                    </p>
-                  </div>
-                  <div className="rounded-[16px] bg-white px-3 py-3">
-                    <p className="text-[11px] font-medium text-slate">표준품셈 매칭 승인</p>
-                    <p className="mt-1 text-[18px] font-bold text-foreground">
-                      {uploadedPdfAcceptedMatchCount}
-                    </p>
-                  </div>
-                  <div className="rounded-[16px] bg-white px-3 py-3">
-                    <p className="text-[11px] font-medium text-slate">적산내역 반영</p>
-                    <p className="mt-1 text-[18px] font-bold text-foreground">
-                      {reflectedUploadedPdfEstimateCount}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-              <StandardMatchTable
-                candidates={visibleCandidates}
-                matches={automaticReviewMatches}
-                onChangeStatus={handleMatchStatusChange}
-                standardItems={seed.standardItems}
-              />
-              <ManualStandardMatchReview
-                candidates={visibleCandidates}
-                matches={manualReviewMatches}
-                onApproveManualMatch={handleManualMatchApprove}
-                onChangeStatus={handleManualMatchReviewStatusChange}
-                options={manualMatchOptions}
-              />
-              <EstimateItemsTable
-                items={estimateItems}
-                onExportCsv={() => exportEstimateToCsv(estimateItems)}
-                onExportExcel={() => exportEstimateToExcel(estimateItems)}
-              />
-              <UnitPriceUploadPanel
-                errorMessage={unitPriceErrorMessage}
-                fileName={unitPriceFileName}
-                itemCount={unitPrices.length}
-                onSelectFile={handleUnitPriceUpload}
-                parseStatus={unitPriceParseStatus}
-              />
-              <EstimateStatementTable
-                items={estimateStatementItems}
-                onExportExcel={() => exportEstimateStatementToExcel(estimateStatementItems)}
-                summary={estimateStatementSummary}
-              />
-            </>
-          ) : null}
-
-          <EstimationDataStrategyCard />
-          <IfcExpansionNotice />
         </>
       ) : (
-        <>
+        <div className="space-y-5">
           <ScheduleForecastDashboard
             categorySummaries={scheduleSummaries}
             estimateItems={estimateItems}
@@ -899,7 +950,7 @@ export function EstimationDashboard() {
             scheduleItems={seed.scheduleForecastItems}
           />
           <IfcExpansionNotice />
-        </>
+        </div>
       )}
     </div>
   );
