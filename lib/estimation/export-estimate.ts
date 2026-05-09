@@ -2,6 +2,7 @@ import type {
   EstimateExportRow,
   EstimateItemRecord,
   EstimateStatementItemRecord,
+  ManualEstimateStatementItemRecord,
   RebarQuantityCandidateRecord,
   StatementReviewStatus
 } from "@/lib/estimation/types";
@@ -256,6 +257,96 @@ export function exportEstimateStatementToExcel(
         </tr>
       `;
     })
+    .join("");
+
+  const html = `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+      </head>
+      <body>
+        <table border="1">
+          <thead>
+            <tr>${statementHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  downloadBlob(
+    new Blob(["\uFEFF", html], { type: "application/vnd.ms-excel;charset=utf-8;" }),
+    fileName
+  );
+}
+
+function getManualStatementQuantity(item: ManualEstimateStatementItemRecord): string | number {
+  return item.quantityReviewRequired || item.quantity <= 0 ? "수량 확인 필요" : item.quantity;
+}
+
+function getManualStatementUnitPrice(item: ManualEstimateStatementItemRecord): string | number {
+  return typeof item.manualUnitPrice === "number" && item.manualUnitPrice > 0
+    ? item.manualUnitPrice
+    : "단가 입력 필요";
+}
+
+function getManualStatementAmount(item: ManualEstimateStatementItemRecord): string | number {
+  if (item.status === "calculated" && typeof item.amount === "number") {
+    return item.amount;
+  }
+
+  if (item.status === "quantity_review_required") {
+    return "수량 확인 필요";
+  }
+
+  return "단가 입력 필요";
+}
+
+const manualStatementStatusLabel = {
+  calculated: "금액 산출 완료",
+  quantity_review_required: "수량 확인 필요",
+  unit_price_required: "단가 입력 필요"
+} as const;
+
+export function exportManualEstimateStatementToExcel(
+  statementItems: ManualEstimateStatementItemRecord[],
+  fileName = "manual-estimate-statement.xls"
+) {
+  const statementHeaders = [
+    "공종",
+    "품명",
+    "규격",
+    "수량",
+    "단위",
+    "공사단가",
+    "금액",
+    "산출근거",
+    "도면번호",
+    "도면명",
+    "검토상태",
+    "비고"
+  ];
+
+  const tableRows = statementItems
+    .map(
+      (item) => `
+        <tr>
+          <td>${escapeHtml(item.workCategory)}</td>
+          <td>${escapeHtml(item.itemName)}</td>
+          <td>${escapeHtml(item.specification)}</td>
+          <td>${escapeHtml(getManualStatementQuantity(item))}</td>
+          <td>${escapeHtml(item.unit || "-")}</td>
+          <td>${escapeHtml(getManualStatementUnitPrice(item))}</td>
+          <td>${escapeHtml(getManualStatementAmount(item))}</td>
+          <td>${escapeHtml(item.calculationBasis ?? "")}</td>
+          <td>${escapeHtml(item.sourceDrawingNo ?? "")}</td>
+          <td>${escapeHtml(item.sourceDrawingName ?? "")}</td>
+          <td>${escapeHtml(manualStatementStatusLabel[item.status])}</td>
+          <td>${escapeHtml(item.remark ?? "")}</td>
+        </tr>
+      `
+    )
     .join("");
 
   const html = `

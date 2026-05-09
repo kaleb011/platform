@@ -38,8 +38,8 @@ export function UnitPriceUploadPanel({
   return (
     <Card className="section-enter">
       <SectionHeading
-        title="건축공사 표준일위대가 업로드"
-        description="2026년 건축공사 표준일위대가 Excel 파일을 업로드하면 승인된 물량내역에 단가를 매칭합니다."
+        title="참고용 건축공사 표준일위대가 업로드"
+        description="2026년 건축공사 표준일위대가 Excel 파일을 참고용 단가자료로 읽습니다. 최종 금액은 사용자가 입력한 공사단가를 우선 사용합니다."
         action={<Badge tone={statusTone[parseStatus]}>{statusLabel[parseStatus]}</Badge>}
       />
 

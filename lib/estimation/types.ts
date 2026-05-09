@@ -443,6 +443,37 @@ export interface EstimateStatementSummary {
   matchReviewRequiredCount: number;
 }
 
+export type ManualEstimateStatementStatus =
+  | "calculated"
+  | "unit_price_required"
+  | "quantity_review_required";
+
+export interface ManualEstimateStatementItemRecord {
+  id: string;
+  sourceEstimateItemId: string;
+  workCategory: string;
+  itemName: string;
+  specification: string;
+  quantity: number;
+  unit: string;
+  quantityReviewRequired: boolean;
+  manualUnitPrice: number | null;
+  amount: number | null;
+  status: ManualEstimateStatementStatus;
+  sourceDrawingNo?: string | null;
+  sourceDrawingName?: string | null;
+  calculationBasis?: string | null;
+  remark?: string | null;
+}
+
+export interface ManualEstimateStatementSummary {
+  totalCount: number;
+  calculatedCount: number;
+  unitPriceRequiredCount: number;
+  quantityReviewRequiredCount: number;
+  totalAmount: number;
+}
+
 export interface ScheduleForecastItemRecord {
   id: string;
   projectId?: string | null;

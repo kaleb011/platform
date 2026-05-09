@@ -17,9 +17,9 @@ import { DrawingExtractionTable } from "@/components/estimation/DrawingExtractio
 import { DrawingIntelligencePanel } from "@/components/estimation/DrawingIntelligencePanel";
 import { DrawingUploadPanel } from "@/components/estimation/DrawingUploadPanel";
 import { EstimateItemsTable } from "@/components/estimation/EstimateItemsTable";
-import { EstimateStatementTable } from "@/components/estimation/EstimateStatementTable";
 import { EstimationDataStrategyCard } from "@/components/estimation/EstimationDataStrategyCard";
 import { IfcExpansionNotice } from "@/components/estimation/IfcExpansionNotice";
+import { ManualEstimateStatementTable } from "@/components/estimation/ManualEstimateStatementTable";
 import { ManualStandardMatchReview } from "@/components/estimation/ManualStandardMatchReview";
 import { PdfTextExtractionSummary } from "@/components/estimation/PdfTextExtractionSummary";
 import { RebarQuantityReview } from "@/components/estimation/RebarQuantityReview";
@@ -38,9 +38,9 @@ import {
   extractDrawingSheetIndexesFromPdfResults
 } from "@/lib/estimation/drawing-intelligence";
 import {
-  exportEstimateStatementToExcel,
   exportEstimateToCsv,
   exportEstimateToExcel,
+  exportManualEstimateStatementToExcel,
   exportRebarQuantityCandidatesToExcel
 } from "@/lib/estimation/export-estimate";
 import {
@@ -55,7 +55,6 @@ import {
 } from "@/lib/estimation/sample-data";
 import {
   buildScheduleCategorySummaries,
-  buildEstimateStatementItems,
   createCandidatesFromPdfText,
   createDrawingFileRecordFromFile,
   createManualStandardMatchOptions,
@@ -64,8 +63,7 @@ import {
   extractPdfTextFromFile,
   getApprovedEstimateCandidates,
   getDrawingFileType,
-  isManualStandardMatchTarget,
-  summarizeEstimateStatementItems
+  isManualStandardMatchTarget
 } from "@/lib/estimation/service";
 import { parseArchitectureUnitPriceWorkbook } from "@/lib/estimation/unit-price-parser";
 import type {
@@ -73,6 +71,8 @@ import type {
   EstimateItemRecord,
   EstimateItemMatchRecord,
   EstimationTabKey,
+  ManualEstimateStatementItemRecord,
+  ManualEstimateStatementSummary,
   PdfTextExtractionResult,
   ProjectEstimateState,
   RebarQuantityCandidateRecord,
@@ -100,6 +100,80 @@ const summaryIcons = {
 type SummaryCardKey = keyof typeof summaryIcons;
 type UnitPriceParseStatus = "idle" | "parsing" | "success" | "failed";
 
+function parseManualUnitPrice(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function buildManualEstimateStatementItems(
+  estimateItems: EstimateItemRecord[],
+  unitPriceInputs: Record<string, string>
+): ManualEstimateStatementItemRecord[] {
+  return estimateItems.map((item) => {
+    const manualUnitPrice = parseManualUnitPrice(unitPriceInputs[item.id]);
+    const quantityReviewRequired = Boolean(item.quantityReviewRequired) || item.quantity <= 0;
+    const status = quantityReviewRequired
+      ? "quantity_review_required"
+      : manualUnitPrice === null
+        ? "unit_price_required"
+        : "calculated";
+
+    return {
+      id: `manual-statement-${item.id}`,
+      sourceEstimateItemId: item.id,
+      workCategory: item.workCategory,
+      itemName: item.itemName,
+      specification: item.specification ?? "",
+      quantity: item.quantity,
+      unit: item.unit,
+      quantityReviewRequired,
+      manualUnitPrice,
+      amount:
+        !quantityReviewRequired && manualUnitPrice !== null
+          ? item.quantity * manualUnitPrice
+          : null,
+      status,
+      sourceDrawingNo: item.drawingNo,
+      sourceDrawingName: item.drawingTitle,
+      calculationBasis: item.calculationBasis,
+      remark: item.remark ?? item.sourceNote ?? null
+    };
+  });
+}
+
+function summarizeManualEstimateStatementItems(
+  items: ManualEstimateStatementItemRecord[]
+): ManualEstimateStatementSummary {
+  return items.reduce<ManualEstimateStatementSummary>(
+    (summary, item) => {
+      summary.totalCount += 1;
+
+      if (item.status === "calculated") {
+        summary.calculatedCount += 1;
+        summary.totalAmount += item.amount ?? 0;
+      } else if (item.status === "quantity_review_required") {
+        summary.quantityReviewRequiredCount += 1;
+      } else {
+        summary.unitPriceRequiredCount += 1;
+      }
+
+      return summary;
+    },
+    {
+      totalCount: 0,
+      calculatedCount: 0,
+      unitPriceRequiredCount: 0,
+      quantityReviewRequiredCount: 0,
+      totalAmount: 0
+    }
+  );
+}
+
 export function EstimationDashboard() {
   const seed = useMemo(() => createEstimationSampleData(), []);
   const [activeTab, setActiveTab] = useState<EstimationTabKey>("drawing-estimate");
@@ -116,6 +190,7 @@ export function EstimationDashboard() {
   const [unitPriceParseStatus, setUnitPriceParseStatus] =
     useState<UnitPriceParseStatus>("idle");
   const [unitPriceErrorMessage, setUnitPriceErrorMessage] = useState<string | null>(null);
+  const [manualUnitPriceInputs, setManualUnitPriceInputs] = useState<Record<string, string>>({});
   const [importedSheetName, setImportedSheetName] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(
     "샘플 도면/적산 데이터가 있는 프로젝트와 도면 데이터가 없는 프로젝트 흐름을 함께 확인할 수 있습니다."
@@ -218,13 +293,13 @@ export function EstimationDashboard() {
     () => [...standardEstimateItems, ...approvedRebarEstimateItems],
     [approvedRebarEstimateItems, standardEstimateItems]
   );
-  const estimateStatementItems = useMemo(
-    () => buildEstimateStatementItems(estimateItems, unitPrices),
-    [estimateItems, unitPrices]
+  const manualEstimateStatementItems = useMemo(
+    () => buildManualEstimateStatementItems(estimateItems, manualUnitPriceInputs),
+    [estimateItems, manualUnitPriceInputs]
   );
-  const estimateStatementSummary = useMemo(
-    () => summarizeEstimateStatementItems(estimateStatementItems),
-    [estimateStatementItems]
+  const manualEstimateStatementSummary = useMemo(
+    () => summarizeManualEstimateStatementItems(manualEstimateStatementItems),
+    [manualEstimateStatementItems]
   );
   const uploadedPdfPendingMatchCount = displayedMatches.filter(
     (match) =>
@@ -300,8 +375,8 @@ export function EstimationDashboard() {
     {
       key: "amountReady",
       label: "금액 산출 가능",
-      value: `${estimateStatementSummary.calculatedCount}`,
-      footnote: "일위대가와 수량 검토가 완료되어 금액 산출 가능한 항목",
+      value: `${manualEstimateStatementSummary.calculatedCount}`,
+      footnote: "수량과 사용자가 입력한 공사단가로 금액 산출 가능한 항목",
       tone: "green"
     }
   ];
@@ -494,6 +569,13 @@ export function EstimationDashboard() {
     });
 
     setNotice("수동 품셈 매칭 검토 상태를 변경했습니다. 후보 승인 상태는 유지됩니다.");
+  };
+
+  const handleManualUnitPriceChange = (estimateItemId: string, value: string) => {
+    setManualUnitPriceInputs((current) => ({
+      ...current,
+      [estimateItemId]: value
+    }));
   };
 
   const handleRebarCandidateChange = (
@@ -697,7 +779,7 @@ export function EstimationDashboard() {
       setUnitPrices(records);
       setUnitPriceParseStatus("success");
       setNotice(
-        `${file.name} 일위대가 ${records.length}건을 읽었습니다. 승인된 물량내역에 단가 매칭을 적용했습니다.`
+        `${file.name} 일위대가 ${records.length}건을 참고용 단가자료로 읽었습니다. 최종 금액은 수기 입력 공사단가를 우선 사용합니다.`
       );
     } catch (error) {
       const message =
@@ -778,8 +860,8 @@ export function EstimationDashboard() {
               적산내역 보조
             </h2>
             <p className="mt-2 text-[14px] leading-6 text-slate">
-              도면 PDF에서 수량 후보를 추출하고, 검토된 항목에 표준품셈과 일위대가를
-              적용해 적산내역서 초안을 생성합니다.
+              도면 PDF에서 수량 후보를 추출하고, 검토된 항목에 표준품셈과 사용자가 입력한
+              공사단가를 적용해 적산내역서 초안을 생성합니다.
             </p>
           </div>
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-primary/10 text-primary">
@@ -906,24 +988,39 @@ export function EstimationDashboard() {
                     onExportCsv={() => exportEstimateToCsv(estimateItems)}
                     onExportExcel={() => exportEstimateToExcel(estimateItems)}
                   />
-                  <UnitPriceUploadPanel
-                    errorMessage={unitPriceErrorMessage}
-                    fileName={unitPriceFileName}
-                    itemCount={unitPrices.length}
-                    onSelectFile={handleUnitPriceUpload}
-                    parseStatus={unitPriceParseStatus}
+                  <ManualEstimateStatementTable
+                    items={manualEstimateStatementItems}
+                    onChangeUnitPrice={handleManualUnitPriceChange}
+                    onExportExcel={() =>
+                      exportManualEstimateStatementToExcel(manualEstimateStatementItems)
+                    }
+                    summary={manualEstimateStatementSummary}
+                    unitPriceInputs={manualUnitPriceInputs}
                   />
-                  <EstimateStatementTable
-                    items={estimateStatementItems}
-                    onExportExcel={() => exportEstimateStatementToExcel(estimateStatementItems)}
-                    summary={estimateStatementSummary}
-                  />
+                  <details className="rounded-[20px] border border-border bg-white px-4 py-4 shadow-sm">
+                    <summary className="cursor-pointer text-[14px] font-bold text-foreground">
+                      참고용 일위대가 자료
+                    </summary>
+                    <p className="mt-2 text-[12px] leading-5 text-slate">
+                      표준일위대가 Excel 파서는 보존하지만, 메인 적산내역서 금액 계산은 사용자가
+                      직접 입력한 공사단가를 우선 사용합니다.
+                    </p>
+                    <div className="mt-4">
+                      <UnitPriceUploadPanel
+                        errorMessage={unitPriceErrorMessage}
+                        fileName={unitPriceFileName}
+                        itemCount={unitPrices.length}
+                        onSelectFile={handleUnitPriceUpload}
+                        parseStatus={unitPriceParseStatus}
+                      />
+                    </div>
+                  </details>
                 </>
               ) : (
                 <Card className="bg-white shadow-sm">
                   <SectionHeading
                     title="도면 업로드 대기"
-                    description="PDF 도면을 업로드하면 도면 인덱스, 후보 검수, 표준품셈 매칭, 일위대가 적용 흐름이 이 영역에 표시됩니다."
+                    description="PDF 도면을 업로드하면 도면 인덱스, 후보 검수, 표준품셈 매칭, 공사단가 입력 흐름이 이 영역에 표시됩니다."
                   />
                   <div className="rounded-[14px] border border-dashed border-border bg-[#f8fafc] px-4 py-6 text-[13px] leading-6 text-slate">
                     이 프로젝트에는 아직 도면 데이터가 없습니다. 왼쪽 업로드 패널에서 PDF 도면을
