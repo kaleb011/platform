@@ -835,6 +835,11 @@ type UnitPriceKeywordRule = {
 
 const unitPriceKeywordRules: UnitPriceKeywordRule[] = [
   {
+    keywords: ["철근가공및조립", "철근"],
+    unitPriceKeywords: ["철근"],
+    reason: "철근 수량 산출 후보 키워드 매칭"
+  },
+  {
     keywords: ["아스콘포장", "아스콘"],
     unitPriceKeywords: ["아스콘포장", "아스콘"],
     reason: "아스콘/포장 키워드 매칭"

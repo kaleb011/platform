@@ -18,6 +18,7 @@ import { EstimationDataStrategyCard } from "@/components/estimation/EstimationDa
 import { IfcExpansionNotice } from "@/components/estimation/IfcExpansionNotice";
 import { ManualStandardMatchReview } from "@/components/estimation/ManualStandardMatchReview";
 import { PdfTextExtractionSummary } from "@/components/estimation/PdfTextExtractionSummary";
+import { RebarQuantityReview } from "@/components/estimation/RebarQuantityReview";
 import { ScheduleForecastDashboard } from "@/components/estimation/ScheduleForecastDashboard";
 import { StandardMatchTable } from "@/components/estimation/StandardMatchTable";
 import { UnitPriceUploadPanel } from "@/components/estimation/UnitPriceUploadPanel";
@@ -30,8 +31,15 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import {
   exportEstimateStatementToExcel,
   exportEstimateToCsv,
-  exportEstimateToExcel
+  exportEstimateToExcel,
+  exportRebarQuantityCandidatesToExcel
 } from "@/lib/estimation/export-estimate";
+import {
+  buildRebarQuantityCandidates,
+  createEstimateItemsFromAcceptedRebarCandidates,
+  extractRebarSpecsFromPdfResults,
+  recalculateRebarQuantityCandidate
+} from "@/lib/estimation/rebar-quantity";
 import {
   createEstimationSampleData,
   createSampleProjectEstimateStates
@@ -58,6 +66,8 @@ import type {
   EstimationTabKey,
   PdfTextExtractionResult,
   ProjectEstimateState,
+  RebarQuantityCandidateRecord,
+  RebarReviewStatus,
   ReviewStatus,
   UnitPriceRecord
 } from "@/lib/estimation/types";
@@ -88,6 +98,7 @@ export function EstimationDashboard() {
   const [candidates, setCandidates] = useState(() => seed.extractionCandidates);
   const [matches, setMatches] = useState(() => seed.estimateItemMatches);
   const [pdfTextResults, setPdfTextResults] = useState<PdfTextExtractionResult[]>([]);
+  const [rebarCandidates, setRebarCandidates] = useState<RebarQuantityCandidateRecord[]>([]);
   const [unitPrices, setUnitPrices] = useState<UnitPriceRecord[]>([]);
   const [unitPriceFileName, setUnitPriceFileName] = useState<string | null>(null);
   const [unitPriceParseStatus, setUnitPriceParseStatus] =
@@ -151,8 +162,18 @@ export function EstimationDashboard() {
     () => displayedMatches.filter((match) => !isManualStandardMatchTarget(match)),
     [displayedMatches]
   );
-
-  const estimateItems = useMemo<EstimateItemRecord[]>(
+  const activePdfFileNames = useMemo(
+    () => new Set(activePdfTextResults.map((result) => result.fileName)),
+    [activePdfTextResults]
+  );
+  const activeRebarCandidates = useMemo(
+    () =>
+      rebarCandidates.filter((candidate) =>
+        candidate.sourceFileName ? activePdfFileNames.has(candidate.sourceFileName) : true
+      ),
+    [activePdfFileNames, rebarCandidates]
+  );
+  const standardEstimateItems = useMemo<EstimateItemRecord[]>(
     () =>
       deriveEstimateItems({
         candidates: visibleCandidates,
@@ -160,6 +181,14 @@ export function EstimationDashboard() {
         standardItems: seed.standardItems
       }),
     [displayedMatches, seed.standardItems, visibleCandidates]
+  );
+  const approvedRebarEstimateItems = useMemo(
+    () => createEstimateItemsFromAcceptedRebarCandidates(activeRebarCandidates),
+    [activeRebarCandidates]
+  );
+  const estimateItems = useMemo<EstimateItemRecord[]>(
+    () => [...standardEstimateItems, ...approvedRebarEstimateItems],
+    [approvedRebarEstimateItems, standardEstimateItems]
   );
   const estimateStatementItems = useMemo(
     () => buildEstimateStatementItems(estimateItems, unitPrices),
@@ -437,6 +466,36 @@ export function EstimationDashboard() {
     setNotice("수동 품셈 매칭 검토 상태를 변경했습니다. 후보 승인 상태는 유지됩니다.");
   };
 
+  const handleRebarCandidateChange = (
+    candidateId: string,
+    updates: Partial<RebarQuantityCandidateRecord>
+  ) => {
+    setRebarCandidates((current) =>
+      current.map((candidate) =>
+        candidate.id === candidateId
+          ? recalculateRebarQuantityCandidate({ ...candidate, ...updates })
+          : candidate
+      )
+    );
+    setNotice("철근 수량 산출 후보 값을 보정했습니다. 수정된 값으로 수량을 다시 계산했습니다.");
+  };
+
+  const handleRebarCandidateStatusChange = (
+    candidateId: string,
+    reviewStatus: RebarReviewStatus
+  ) => {
+    setRebarCandidates((current) =>
+      current.map((candidate) =>
+        candidate.id === candidateId ? { ...candidate, reviewStatus } : candidate
+      )
+    );
+    setNotice(
+      reviewStatus === "accepted"
+        ? "철근 수량 산출 후보를 승인했습니다. 승인된 물량내역과 금액 포함 적산내역서 흐름에 반영됩니다."
+        : "철근 수량 산출 후보 검토 상태를 변경했습니다."
+    );
+  };
+
   const addDrawingFileToActiveProject = (record: DrawingFileRecord) => {
     setProjectStates((current) =>
       current.map((project) =>
@@ -526,6 +585,8 @@ export function EstimationDashboard() {
           }))
         };
         const pdfCandidates = createCandidatesFromPdfText(linkedResult, record.id);
+        const rebarSpecs = extractRebarSpecsFromPdfResults([linkedResult]);
+        const nextRebarCandidates = buildRebarQuantityCandidates(rebarSpecs);
 
         setPdfTextResults((current) => [
           linkedResult,
@@ -534,6 +595,10 @@ export function EstimationDashboard() {
         setCandidates((current) => [
           ...pdfCandidates,
           ...current.filter((candidate) => candidate.drawingFileId !== record.id)
+        ]);
+        setRebarCandidates((current) => [
+          ...nextRebarCandidates,
+          ...current.filter((candidate) => candidate.sourceFileName !== linkedResult.fileName)
         ]);
         updateDrawingFileInActiveProject(record.id, {
           pageCount: linkedResult.pageCount,
@@ -553,7 +618,7 @@ export function EstimationDashboard() {
           );
         } else {
           messages.push(
-            `${file.name}: ${linkedResult.pageCount}페이지를 확인했고 PDF 텍스트 후보 ${pdfCandidates.length}건을 생성했습니다.`
+            `${file.name}: ${linkedResult.pageCount}페이지를 확인했고 PDF 텍스트 후보 ${pdfCandidates.length}건, 철근 수량 산출 후보 ${nextRebarCandidates.length}건을 생성했습니다.`
           );
         }
       } catch {
@@ -716,6 +781,12 @@ export function EstimationDashboard() {
 
           {drawingDataExists ? (
             <>
+              <RebarQuantityReview
+                candidates={activeRebarCandidates}
+                onChangeCandidate={handleRebarCandidateChange}
+                onChangeStatus={handleRebarCandidateStatusChange}
+                onExportExcel={() => exportRebarQuantityCandidatesToExcel(activeRebarCandidates)}
+              />
               <DrawingExtractionTable
                 candidates={visibleCandidates}
                 onChangeStatus={handleCandidateStatusChange}

@@ -50,6 +50,20 @@ export type StatementReviewStatus =
   | "unit_check_required"
   | "match_review_required";
 
+export type RebarMemberType = "beam" | "column" | "footing" | "slab" | "unknown";
+
+export type RebarPosition =
+  | "top"
+  | "bottom"
+  | "main"
+  | "stirrup"
+  | "tie"
+  | "x"
+  | "y"
+  | "unknown";
+
+export type RebarReviewStatus = "pending" | "accepted" | "rejected";
+
 export interface DrawingFileRecord {
   id: string;
   projectId?: string | null;
@@ -231,8 +245,78 @@ export interface EstimateItemRecord {
   sourceFileName?: string | null;
   sourcePage?: number | null;
   quantityReviewRequired?: boolean;
-  matchSource?: "sample" | "uploaded_pdf" | "manual";
+  matchSource?: "sample" | "uploaded_pdf" | "manual" | "rebar";
   standardCode?: string | null;
+}
+
+export interface RebarSpecRecord {
+  id: string;
+  sourcePage?: number;
+  sourceFileName?: string;
+  drawingNo?: string;
+  memberName?: string;
+  memberType: RebarMemberType;
+  sectionWidthMm?: number;
+  sectionDepthMm?: number;
+  sectionHeightMm?: number;
+  lengthMm?: number;
+  heightMm?: number;
+  footingWidthMm?: number;
+  footingLengthMm?: number;
+  footingDepthMm?: number;
+  memberCount?: number;
+  diameter?: string;
+  barCount?: number;
+  spacingMm?: number;
+  position: RebarPosition;
+  rawText: string;
+  sourceTextSnippet?: string;
+  confidence: number;
+}
+
+export interface RebarQuantityCandidateRecord {
+  id: string;
+  sourceRebarSpecId?: string;
+  sourcePage?: number;
+  sourceFileName?: string;
+  drawingNo?: string;
+  memberName?: string;
+  memberType: RebarMemberType;
+  position: RebarPosition;
+  workCategory: string;
+  itemName: string;
+  specification: string;
+  diameter: string;
+  unitWeightKgPerM: number;
+  barCount?: number;
+  spacingMm?: number;
+  memberLengthMm?: number;
+  memberHeightMm?: number;
+  sectionWidthMm?: number;
+  sectionDepthMm?: number;
+  footingWidthMm?: number;
+  footingLengthMm?: number;
+  memberCount: number;
+  quantityKg: number;
+  quantityTon: number;
+  unit: "kg" | "ton";
+  calculationFormula: string;
+  calculationBasis: string;
+  confidence: number;
+  reviewStatus: RebarReviewStatus;
+  quantityReviewRequired: boolean;
+  note?: string;
+  rawText?: string;
+  sourceTextSnippet?: string;
+}
+
+export interface RebarQuantitySummary {
+  totalCandidates: number;
+  calculatedCandidates: number;
+  reviewRequiredCandidates: number;
+  acceptedCandidates: number;
+  totalKg: number;
+  totalTon: number;
 }
 
 export interface EstimateStatementItemRecord {

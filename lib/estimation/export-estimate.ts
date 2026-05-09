@@ -2,6 +2,7 @@ import type {
   EstimateExportRow,
   EstimateItemRecord,
   EstimateStatementItemRecord,
+  RebarQuantityCandidateRecord,
   StatementReviewStatus
 } from "@/lib/estimation/types";
 
@@ -268,6 +269,91 @@ export function exportEstimateStatementToExcel(
             <tr>${statementHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
           </thead>
           <tbody>${tableRows}</tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  downloadBlob(
+    new Blob(["\uFEFF", html], { type: "application/vnd.ms-excel;charset=utf-8;" }),
+    fileName
+  );
+}
+
+export function exportRebarQuantityCandidatesToExcel(
+  candidates: RebarQuantityCandidateRecord[],
+  fileName = "rebar-quantity-candidates.xls"
+) {
+  const rebarHeaders = [
+    "부재명",
+    "부재 종류",
+    "철근 위치",
+    "철근 규격",
+    "철근 개수",
+    "간격",
+    "단위중량",
+    "길이/높이/기초치수",
+    "반복개수",
+    "수량 kg",
+    "수량 ton",
+    "산출식",
+    "산출근거",
+    "출처파일",
+    "출처페이지",
+    "검토상태",
+    "비고"
+  ];
+
+  const rows = candidates
+    .map((candidate) => {
+      const sizeLabel = [
+        candidate.memberLengthMm ? `L=${candidate.memberLengthMm}` : null,
+        candidate.memberHeightMm ? `H=${candidate.memberHeightMm}` : null,
+        candidate.sectionWidthMm && candidate.sectionDepthMm
+          ? `${candidate.sectionWidthMm}x${candidate.sectionDepthMm}`
+          : null,
+        candidate.footingWidthMm && candidate.footingLengthMm
+          ? `기초 ${candidate.footingWidthMm}x${candidate.footingLengthMm}`
+          : null
+      ]
+        .filter(Boolean)
+        .join(" / ");
+
+      return `
+        <tr>
+          <td>${escapeHtml(candidate.memberName ?? "")}</td>
+          <td>${escapeHtml(candidate.memberType)}</td>
+          <td>${escapeHtml(candidate.position)}</td>
+          <td>${escapeHtml(candidate.diameter)}</td>
+          <td>${escapeHtml(candidate.barCount ?? "")}</td>
+          <td>${escapeHtml(candidate.spacingMm ? `@${candidate.spacingMm}` : "")}</td>
+          <td>${escapeHtml(candidate.unitWeightKgPerM)}</td>
+          <td>${escapeHtml(sizeLabel)}</td>
+          <td>${escapeHtml(candidate.memberCount)}</td>
+          <td>${escapeHtml(candidate.quantityReviewRequired ? "검토 필요" : candidate.quantityKg)}</td>
+          <td>${escapeHtml(candidate.quantityReviewRequired ? "검토 필요" : candidate.quantityTon)}</td>
+          <td>${escapeHtml(candidate.calculationFormula)}</td>
+          <td>${escapeHtml(candidate.calculationBasis)}</td>
+          <td>${escapeHtml(candidate.sourceFileName ?? "")}</td>
+          <td>${escapeHtml(candidate.sourcePage ? `p.${candidate.sourcePage}` : "")}</td>
+          <td>${escapeHtml(candidate.reviewStatus)}</td>
+          <td>${escapeHtml(candidate.note ?? "")}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const html = `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+      </head>
+      <body>
+        <table border="1">
+          <thead>
+            <tr>${rebarHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>${rows}</tbody>
         </table>
       </body>
     </html>
