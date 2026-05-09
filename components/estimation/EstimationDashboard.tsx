@@ -725,7 +725,7 @@ export function EstimationDashboard() {
     : "이 프로젝트에는 아직 도면 데이터가 없습니다. PDF 도면을 업로드하면 적산내역 초안 생성 흐름을 시작할 수 있습니다.";
 
   return (
-    <div className="relative left-1/2 w-[min(calc(100vw-2rem),80rem)] -translate-x-1/2 bg-[#f5f7fb] px-3 py-5 text-foreground sm:px-5 lg:px-6">
+    <div className="mx-auto min-h-screen w-full max-w-7xl px-4 py-6 text-foreground sm:px-6 lg:px-8">
       <header className="mb-6 rounded-[20px] border border-border bg-white px-4 py-4 shadow-sm lg:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
