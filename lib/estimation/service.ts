@@ -11,6 +11,7 @@ import type {
   ScheduleForecastItemRecord,
   StandardItemKeywordRecord,
   StandardItemRecord,
+  StatementReviewStatus,
   SupportedDrawingFileType,
   UnitPriceRecord
 } from "@/lib/estimation/types";
@@ -816,34 +817,159 @@ function getUnitPriceSearchTexts(item: EstimateItemRecord): string[] {
   ].map(normalizeMatchText);
 }
 
+type UnitPriceMatchKind = "exact" | "contains" | "keyword";
+
+type UnitPriceMatchResult = {
+  unitPrice: UnitPriceRecord;
+  matchKind: UnitPriceMatchKind;
+  matchReason: string;
+  matchReviewRequired: boolean;
+};
+
+type UnitPriceKeywordRule = {
+  keywords: string[];
+  unitPriceKeywords: string[];
+  reason: string;
+  weak?: boolean;
+};
+
+const unitPriceKeywordRules: UnitPriceKeywordRule[] = [
+  {
+    keywords: ["아스콘포장", "아스콘"],
+    unitPriceKeywords: ["아스콘포장", "아스콘"],
+    reason: "아스콘/포장 키워드 매칭"
+  },
+  {
+    keywords: ["보도블럭"],
+    unitPriceKeywords: ["보도블럭"],
+    reason: "보도블럭 키워드 매칭"
+  },
+  {
+    keywords: ["경계석"],
+    unitPriceKeywords: ["경계석"],
+    reason: "경계석 키워드 매칭"
+  },
+  {
+    keywords: ["오수관"],
+    unitPriceKeywords: ["오수관"],
+    reason: "오수관 키워드 매칭"
+  },
+  {
+    keywords: ["우수관"],
+    unitPriceKeywords: ["우수관"],
+    reason: "우수관 키워드 매칭"
+  },
+  {
+    keywords: ["pvc이중벽관"],
+    unitPriceKeywords: ["pvc이중벽관", "pvc"],
+    reason: "PVC이중벽관 키워드 매칭"
+  },
+  {
+    keywords: ["pvc"],
+    unitPriceKeywords: ["pvc"],
+    reason: "PVC 단일 키워드 매칭",
+    weak: true
+  },
+  {
+    keywords: ["빗물받이"],
+    unitPriceKeywords: ["빗물받이"],
+    reason: "빗물받이 키워드 매칭"
+  },
+  {
+    keywords: ["맨홀"],
+    unitPriceKeywords: ["맨홀"],
+    reason: "맨홀 키워드 매칭"
+  },
+  {
+    keywords: ["경질우레탄", "글라스울", "단열재"],
+    unitPriceKeywords: ["단열", "경질우레탄", "글라스울"],
+    reason: "단열재 키워드 매칭"
+  },
+  {
+    keywords: ["thk"],
+    unitPriceKeywords: ["단열", "경질우레탄", "글라스울"],
+    reason: "THK 두께 키워드 매칭",
+    weak: true
+  },
+  {
+    keywords: ["석고보드벽체", "석고보드"],
+    unitPriceKeywords: ["석고보드"],
+    reason: "석고보드 키워드 매칭"
+  },
+  {
+    keywords: ["방화문"],
+    unitPriceKeywords: ["방화문"],
+    reason: "방화문 키워드 매칭"
+  },
+  {
+    keywords: ["우레탄방수", "방수"],
+    unitPriceKeywords: ["우레탄방수", "방수"],
+    reason: "방수 키워드 매칭"
+  },
+  {
+    keywords: ["슬라브", "콘크리트보", "기둥"],
+    unitPriceKeywords: ["콘크리트", "철근콘크리트"],
+    reason: "철근콘크리트 구조 키워드 매칭"
+  },
+  {
+    keywords: ["콘크리트"],
+    unitPriceKeywords: ["콘크리트", "철근콘크리트"],
+    reason: "콘크리트 단일 키워드 매칭",
+    weak: true
+  }
+];
+
+function getUnitPriceText(unitPrice: UnitPriceRecord): string {
+  return normalizeMatchText(
+    `${unitPrice.itemName} ${unitPrice.specification} ${unitPrice.note ?? ""}`
+  );
+}
+
+function hasKeyword(source: string, keywords: string[]): boolean {
+  return keywords.some((keyword) => source.includes(normalizeMatchText(keyword)));
+}
+
+function isWeakContainsMatch(item: EstimateItemRecord, unitPrice: UnitPriceRecord): boolean {
+  const source = getUnitPriceSearchTexts(item).join(" ");
+  const unitPriceText = getUnitPriceText(unitPrice);
+  const sourceTerms = [item.standardItemName, item.itemName]
+    .map(normalizeMatchText)
+    .filter(Boolean);
+  const weakStandaloneTerms = ["pvc", "thk", "보", "문", "창", "벽"];
+
+  if (sourceTerms.some((term) => weakStandaloneTerms.includes(term))) {
+    return true;
+  }
+
+  if (source.includes("pvc") && !source.includes("pvc이중벽관")) {
+    return true;
+  }
+
+  if (
+    source.includes("콘크리트") &&
+    unitPriceText.includes("콘크리트") &&
+    !hasKeyword(source, ["슬라브", "콘크리트보", "기둥", "철근콘크리트"])
+  ) {
+    return true;
+  }
+
+  if (
+    item.workCategory.includes("수장") &&
+    hasKeyword(unitPriceText, ["단열", "경질우레탄", "글라스울"])
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function findUnitPriceByKeywords(
   item: EstimateItemRecord,
   unitPrices: UnitPriceRecord[]
-): UnitPriceRecord | undefined {
+): UnitPriceMatchResult | undefined {
   const source = getUnitPriceSearchTexts(item).join(" ");
-  const rules: Array<{ keywords: string[]; unitPriceKeywords: string[] }> = [
-    { keywords: ["아스콘포장", "아스콘"], unitPriceKeywords: ["아스콘포장", "아스콘"] },
-    { keywords: ["보도블럭"], unitPriceKeywords: ["보도블럭"] },
-    { keywords: ["경계석"], unitPriceKeywords: ["경계석"] },
-    { keywords: ["오수관"], unitPriceKeywords: ["오수관"] },
-    { keywords: ["우수관"], unitPriceKeywords: ["우수관"] },
-    { keywords: ["pvc이중벽관", "pvc"], unitPriceKeywords: ["pvc이중벽관", "pvc"] },
-    { keywords: ["빗물받이"], unitPriceKeywords: ["빗물받이"] },
-    { keywords: ["맨홀"], unitPriceKeywords: ["맨홀"] },
-    {
-      keywords: ["단열재", "경질우레탄", "글라스울", "thk"],
-      unitPriceKeywords: ["단열", "경질우레탄", "글라스울"]
-    },
-    { keywords: ["석고보드벽체", "석고보드"], unitPriceKeywords: ["석고보드"] },
-    { keywords: ["방화문"], unitPriceKeywords: ["방화문"] },
-    { keywords: ["우레탄방수", "방수"], unitPriceKeywords: ["우레탄방수", "방수"] },
-    {
-      keywords: ["슬라브", "콘크리트보", "기둥", "콘크리트"],
-      unitPriceKeywords: ["콘크리트", "철근콘크리트"]
-    }
-  ];
 
-  const matchedRule = rules.find((rule) =>
+  const matchedRule = unitPriceKeywordRules.find((rule) =>
     rule.keywords.some((keyword) => source.includes(normalizeMatchText(keyword)))
   );
 
@@ -851,21 +977,30 @@ function findUnitPriceByKeywords(
     return undefined;
   }
 
-  return unitPrices.find((unitPrice) => {
-    const unitPriceText = normalizeMatchText(
-      `${unitPrice.itemName} ${unitPrice.specification} ${unitPrice.note ?? ""}`
-    );
+  const unitPrice = unitPrices.find((record) => {
+    const unitPriceText = getUnitPriceText(record);
 
     return matchedRule.unitPriceKeywords.some((keyword) =>
       unitPriceText.includes(normalizeMatchText(keyword))
     );
   });
+
+  if (!unitPrice) {
+    return undefined;
+  }
+
+  return {
+    unitPrice,
+    matchKind: "keyword",
+    matchReason: matchedRule.reason,
+    matchReviewRequired: matchedRule.weak === true
+  };
 }
 
-export function matchUnitPriceForEstimateItem(
+function matchUnitPriceForEstimateItemResult(
   item: EstimateItemRecord,
   unitPrices: UnitPriceRecord[]
-): UnitPriceRecord | null {
+): UnitPriceMatchResult | null {
   const standardItemName = normalizeMatchText(item.standardItemName);
   const itemName = normalizeMatchText(item.itemName);
 
@@ -874,7 +1009,12 @@ export function matchUnitPriceForEstimateItem(
   );
 
   if (exactMatch) {
-    return exactMatch;
+    return {
+      unitPrice: exactMatch,
+      matchKind: "exact",
+      matchReason: "표준품셈 항목명과 일위대가 품명 정확 일치",
+      matchReviewRequired: false
+    };
   }
 
   const containsMatch = unitPrices.find((unitPrice) => {
@@ -889,10 +1029,101 @@ export function matchUnitPriceForEstimateItem(
   });
 
   if (containsMatch) {
-    return containsMatch;
+    return {
+      unitPrice: containsMatch,
+      matchKind: "contains",
+      matchReason: "품명 포함 관계 기반 매칭",
+      matchReviewRequired: isWeakContainsMatch(item, containsMatch)
+    };
   }
 
   return findUnitPriceByKeywords(item, unitPrices) ?? null;
+}
+
+export function matchUnitPriceForEstimateItem(
+  item: EstimateItemRecord,
+  unitPrices: UnitPriceRecord[]
+): UnitPriceRecord | null {
+  return matchUnitPriceForEstimateItemResult(item, unitPrices)?.unitPrice ?? null;
+}
+
+export function normalizeUnit(unit: string): string {
+  const value = unit.trim().toLowerCase().replace(/\s+/g, "");
+
+  if (!value) {
+    return "";
+  }
+
+  if (["㎡", "m2", "m²", "m^2", "제곱미터"].includes(value)) {
+    return "m2";
+  }
+
+  if (["㎥", "m3", "m³", "m^3", "세제곱미터"].includes(value)) {
+    return "m3";
+  }
+
+  if (["m", "meter", "미터"].includes(value)) {
+    return "m";
+  }
+
+  if (["ea", "개"].includes(value)) {
+    return "ea";
+  }
+
+  if (value === "식") {
+    return "set";
+  }
+
+  return value;
+}
+
+export function areUnitsCompatible(quantityUnit: string, unitPriceUnit: string): boolean {
+  const left = normalizeUnit(quantityUnit);
+  const right = normalizeUnit(unitPriceUnit);
+
+  if (!left || !right || left === "set" || right === "set") {
+    return false;
+  }
+
+  return left === right;
+}
+
+export function getStatementReviewStatus(args: {
+  quantityReviewRequired: boolean;
+  unitPriceMatched: boolean;
+  unitPrice: number;
+  unitCheckRequired: boolean;
+  matchReviewRequired: boolean;
+}): StatementReviewStatus {
+  if (!args.unitPriceMatched || args.unitPrice <= 0) {
+    return "unit_price_match_required";
+  }
+
+  if (args.quantityReviewRequired) {
+    return "quantity_review_required";
+  }
+
+  if (args.unitCheckRequired) {
+    return "unit_check_required";
+  }
+
+  if (args.matchReviewRequired) {
+    return "match_review_required";
+  }
+
+  return "calculated";
+}
+
+function getStatementReviewMessage(status: StatementReviewStatus): string {
+  const messages: Record<StatementReviewStatus, string> = {
+    calculated: "산출 가능",
+    quantity_review_required: "수량 확인 필요",
+    unit_price_match_required: "일위대가 매칭 필요",
+    unit_check_required: "단위 확인 필요",
+    match_review_required: "매칭 검토 필요"
+  };
+
+  return messages[status];
 }
 
 export function buildEstimateStatementItems(
@@ -900,17 +1131,32 @@ export function buildEstimateStatementItems(
   unitPrices: UnitPriceRecord[]
 ): EstimateStatementItemRecord[] {
   return estimateItems.map((item) => {
-    const matchedUnitPrice = matchUnitPriceForEstimateItem(item, unitPrices);
+    const unitPriceMatch = matchUnitPriceForEstimateItemResult(item, unitPrices);
+    const matchedUnitPrice = unitPriceMatch?.unitPrice ?? null;
     const quantityReviewRequired = item.quantityReviewRequired === true || item.quantity <= 0;
     const unitPriceMatched = Boolean(matchedUnitPrice);
     const unitPrice = matchedUnitPrice?.unitPrice ?? 0;
-    const amountReviewRequired =
-      quantityReviewRequired || !unitPriceMatched || unitPrice <= 0 || item.quantity <= 0;
+    const unitCheckRequired = matchedUnitPrice
+      ? !areUnitsCompatible(item.unit, matchedUnitPrice.unit)
+      : false;
+    const matchReviewRequired = unitPriceMatch?.matchReviewRequired ?? false;
+    const statementReviewStatus = getStatementReviewStatus({
+      quantityReviewRequired,
+      unitPriceMatched,
+      unitPrice,
+      unitCheckRequired,
+      matchReviewRequired
+    });
+    const amountReviewRequired = statementReviewStatus !== "calculated";
     const amount = amountReviewRequired ? 0 : item.quantity * unitPrice;
+    const reviewMessage = getStatementReviewMessage(statementReviewStatus);
     const reviewNotes = [
       item.remark,
+      unitPriceMatch?.matchReason,
       !unitPriceMatched ? "일위대가 매칭 필요" : null,
-      quantityReviewRequired ? "수량 검토 필요" : null
+      quantityReviewRequired ? "수량 확인 필요" : null,
+      unitCheckRequired ? `단위 확인 필요: 물량 ${item.unit || "-"} / 일위대가 ${matchedUnitPrice?.unit || "-"}` : null,
+      matchReviewRequired ? "자동 매칭 신뢰도 확인 필요" : null
     ].filter(Boolean);
 
     return {
@@ -926,12 +1172,18 @@ export function buildEstimateStatementItems(
       unitPriceCode: matchedUnitPrice?.code,
       unitPriceItemName: matchedUnitPrice?.itemName,
       unitPriceSpecification: matchedUnitPrice?.specification,
+      unitPriceUnit: matchedUnitPrice?.unit,
+      unitPriceMatchReason: unitPriceMatch?.matchReason,
       materialCost: matchedUnitPrice?.materialCost ?? 0,
       laborCost: matchedUnitPrice?.laborCost ?? 0,
       expenseCost: matchedUnitPrice?.expenseCost ?? 0,
       unitPrice,
       amount,
       amountReviewRequired,
+      statementReviewStatus,
+      reviewMessage,
+      unitCheckRequired,
+      matchReviewRequired,
       sourceDrawingNo: item.drawingNo ?? "",
       sourceDrawingName: item.drawingTitle ?? "",
       remark: reviewNotes.join(" / ")
@@ -957,6 +1209,18 @@ export function summarizeEstimateStatementItems(
         summary.reviewNeededCount += 1;
       }
 
+      if (item.statementReviewStatus === "calculated") {
+        summary.calculatedCount += 1;
+      } else if (item.statementReviewStatus === "quantity_review_required") {
+        summary.quantityReviewRequiredCount += 1;
+      } else if (item.statementReviewStatus === "unit_price_match_required") {
+        summary.unitPriceMatchRequiredCount += 1;
+      } else if (item.statementReviewStatus === "unit_check_required") {
+        summary.unitCheckRequiredCount += 1;
+      } else if (item.statementReviewStatus === "match_review_required") {
+        summary.matchReviewRequiredCount += 1;
+      }
+
       return summary;
     },
     {
@@ -964,7 +1228,12 @@ export function summarizeEstimateStatementItems(
       matchedCount: 0,
       amountReadyCount: 0,
       reviewNeededCount: 0,
-      totalAmount: 0
+      totalAmount: 0,
+      calculatedCount: 0,
+      quantityReviewRequiredCount: 0,
+      unitPriceMatchRequiredCount: 0,
+      unitCheckRequiredCount: 0,
+      matchReviewRequiredCount: 0
     }
   );
 }

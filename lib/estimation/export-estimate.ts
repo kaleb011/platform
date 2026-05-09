@@ -1,7 +1,8 @@
 import type {
   EstimateExportRow,
   EstimateItemRecord,
-  EstimateStatementItemRecord
+  EstimateStatementItemRecord,
+  StatementReviewStatus
 } from "@/lib/estimation/types";
 
 function getExportQuantity(item: EstimateItemRecord): string | number {
@@ -159,11 +160,47 @@ export function exportEstimateToExcel(items: EstimateItemRecord[], fileName = "e
 }
 
 function getStatementQuantity(item: EstimateStatementItemRecord): string | number {
-  return item.quantityReviewRequired || item.quantity <= 0 ? "검토 필요" : item.quantity;
+  return item.quantityReviewRequired || item.quantity <= 0 ? "수량 확인 필요" : item.quantity;
 }
 
-function getStatementCurrency(value: number, reviewRequired: boolean): string | number {
-  return reviewRequired ? "검토 필요" : value;
+const statementReviewStatusLabel: Record<StatementReviewStatus, string> = {
+  calculated: "산출 가능",
+  quantity_review_required: "수량 확인 필요",
+  unit_price_match_required: "일위대가 매칭 필요",
+  unit_check_required: "단위 확인 필요",
+  match_review_required: "매칭 검토 필요"
+};
+
+function getStatementCostCell(item: EstimateStatementItemRecord, value: number): string | number {
+  return item.unitPriceMatched ? value : "-";
+}
+
+function getStatementUnitPriceCell(item: EstimateStatementItemRecord): string | number {
+  if (!item.unitPriceMatched) {
+    return "-";
+  }
+
+  return item.unitPrice <= 0 ? "단가 확인 필요" : item.unitPrice;
+}
+
+function getStatementAmountCell(item: EstimateStatementItemRecord): string | number {
+  if (item.statementReviewStatus === "calculated") {
+    return item.amount;
+  }
+
+  if (item.statementReviewStatus === "quantity_review_required") {
+    return "수량 확인 필요";
+  }
+
+  if (item.statementReviewStatus === "unit_check_required") {
+    return "단위 확인 필요";
+  }
+
+  if (item.statementReviewStatus === "match_review_required") {
+    return "매칭 검토 필요";
+  }
+
+  return "검토 필요";
 }
 
 export function exportEstimateStatementToExcel(
@@ -192,9 +229,8 @@ export function exportEstimateStatementToExcel(
 
   const tableRows = statementItems
     .map((item) => {
-      const reviewStatus = item.amountReviewRequired ? "검토 필요" : "산출 가능";
       const calculationBasis = item.unitPriceMatched
-        ? "업로드 일위대가 항목 매칭"
+        ? item.unitPriceMatchReason ?? "업로드 일위대가 항목 매칭"
         : "일위대가 매칭 필요";
 
       return `
@@ -204,19 +240,17 @@ export function exportEstimateStatementToExcel(
           <td>${escapeHtml(item.specification)}</td>
           <td>${escapeHtml(getStatementQuantity(item))}</td>
           <td>${escapeHtml(item.unit || "-")}</td>
-          <td>${escapeHtml(getStatementCurrency(item.materialCost, !item.unitPriceMatched))}</td>
-          <td>${escapeHtml(getStatementCurrency(item.laborCost, !item.unitPriceMatched))}</td>
-          <td>${escapeHtml(getStatementCurrency(item.expenseCost, !item.unitPriceMatched))}</td>
-          <td>${escapeHtml(
-            getStatementCurrency(item.unitPrice, !item.unitPriceMatched || item.unitPrice <= 0)
-          )}</td>
-          <td>${escapeHtml(getStatementCurrency(item.amount, item.amountReviewRequired))}</td>
+          <td>${escapeHtml(getStatementCostCell(item, item.materialCost))}</td>
+          <td>${escapeHtml(getStatementCostCell(item, item.laborCost))}</td>
+          <td>${escapeHtml(getStatementCostCell(item, item.expenseCost))}</td>
+          <td>${escapeHtml(getStatementUnitPriceCell(item))}</td>
+          <td>${escapeHtml(getStatementAmountCell(item))}</td>
           <td>${escapeHtml(item.unitPriceCode ?? "")}</td>
           <td>${escapeHtml(item.unitPriceItemName ?? "일위대가 매칭 필요")}</td>
           <td>${escapeHtml(calculationBasis)}</td>
           <td>${escapeHtml(item.sourceDrawingNo ?? "")}</td>
           <td>${escapeHtml(item.sourceDrawingName ?? "")}</td>
-          <td>${escapeHtml(reviewStatus)}</td>
+          <td>${escapeHtml(statementReviewStatusLabel[item.statementReviewStatus])}</td>
           <td>${escapeHtml(item.remark ?? "")}</td>
         </tr>
       `;

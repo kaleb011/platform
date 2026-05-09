@@ -43,6 +43,13 @@ export type EstimateDataStatus = "none" | "sample_ready" | "ready";
 
 export type EstimationTabKey = "drawing-estimate" | "schedule-forecast";
 
+export type StatementReviewStatus =
+  | "calculated"
+  | "quantity_review_required"
+  | "unit_price_match_required"
+  | "unit_check_required"
+  | "match_review_required";
+
 export interface DrawingFileRecord {
   id: string;
   projectId?: string | null;
@@ -241,12 +248,18 @@ export interface EstimateStatementItemRecord {
   unitPriceCode?: string;
   unitPriceItemName?: string;
   unitPriceSpecification?: string;
+  unitPriceUnit?: string;
+  unitPriceMatchReason?: string;
   materialCost: number;
   laborCost: number;
   expenseCost: number;
   unitPrice: number;
   amount: number;
   amountReviewRequired: boolean;
+  statementReviewStatus: StatementReviewStatus;
+  reviewMessage: string;
+  unitCheckRequired: boolean;
+  matchReviewRequired: boolean;
   sourceDrawingNo?: string;
   sourceDrawingName?: string;
   remark?: string;
@@ -258,6 +271,11 @@ export interface EstimateStatementSummary {
   amountReadyCount: number;
   reviewNeededCount: number;
   totalAmount: number;
+  calculatedCount: number;
+  quantityReviewRequiredCount: number;
+  unitPriceMatchRequiredCount: number;
+  unitCheckRequiredCount: number;
+  matchReviewRequiredCount: number;
 }
 
 export interface ScheduleForecastItemRecord {
