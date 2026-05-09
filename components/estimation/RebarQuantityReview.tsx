@@ -61,6 +61,26 @@ const reviewLabelMap = {
   rejected: "제외"
 } as const;
 
+const rebarSourceLabelMap: Record<
+  NonNullable<RebarQuantityCandidateRecord["rebarSourceType"]>,
+  string
+> = {
+  structural_schedule: "구조일람표 기반",
+  structural_plan: "구조평면도 기반",
+  other_structure: "구조 노트 기반 검토 필요",
+  unknown: "출처 유형 검토 필요"
+};
+
+const rebarSourceToneMap: Record<
+  NonNullable<RebarQuantityCandidateRecord["rebarSourceType"]>,
+  "blue" | "gray" | "amber"
+> = {
+  structural_schedule: "blue",
+  structural_plan: "amber",
+  other_structure: "gray",
+  unknown: "gray"
+};
+
 function formatNumber(value: number, fractionDigits = 2) {
   return value.toLocaleString("ko-KR", {
     maximumFractionDigits: fractionDigits,
@@ -127,6 +147,7 @@ function RebarCandidateCard({
   const sourceLabel = sourceSheet
     ? `${sourceSheet.drawingNo ?? "도면번호 검토"} ${sourceSheet.drawingTitle ?? "도면명 검토"} / p.${sourceSheet.sourcePage}`
     : `${candidate.sourceFileName ?? "-"} ${candidate.sourcePage ? `/ p.${candidate.sourcePage}` : ""}`;
+  const rebarSourceType = candidate.rebarSourceType ?? "unknown";
 
   return (
     <div className="rounded-[20px] border border-border bg-white px-4 py-4">
@@ -138,6 +159,9 @@ function RebarCandidateCard({
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge tone="blue">{getRebarMemberTypeLabel(candidate.memberType)}</Badge>
             <Badge tone="gray">{getRebarPositionLabel(candidate.position)}</Badge>
+            <Badge tone={rebarSourceToneMap[rebarSourceType]}>
+              {rebarSourceLabelMap[rebarSourceType]}
+            </Badge>
             <Badge tone={candidate.quantityReviewRequired ? "amber" : "green"}>
               {candidate.quantityReviewRequired ? "수량 검토 필요" : "산출 가능"}
             </Badge>
@@ -312,6 +336,12 @@ export function RebarQuantityReview({
   onExportExcel
 }: RebarQuantityReviewProps) {
   const summary = useMemo(() => summarizeRebarQuantityCandidates(candidates), [candidates]);
+  const structuralScheduleCandidateCount = useMemo(
+    () =>
+      candidates.filter((candidate) => candidate.rebarSourceType === "structural_schedule")
+        .length,
+    [candidates]
+  );
 
   if (candidates.length === 0) {
     return (
@@ -348,10 +378,16 @@ export function RebarQuantityReview({
         }
       />
 
-      <section className="grid grid-cols-2 gap-3">
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <div className="rounded-[16px] bg-[#f8fbf9] px-3 py-3">
-          <p className="text-[11px] font-medium text-slate">철근 정보 후보</p>
+          <p className="text-[11px] font-medium text-slate">중복 제거 후 후보</p>
           <p className="mt-1 text-[18px] font-bold text-foreground">{summary.totalCandidates}</p>
+        </div>
+        <div className="rounded-[16px] bg-[#eef6ff] px-3 py-3">
+          <p className="text-[11px] font-medium text-slate">구조일람표 기반</p>
+          <p className="mt-1 text-[18px] font-bold text-foreground">
+            {structuralScheduleCandidateCount}
+          </p>
         </div>
         <div className="rounded-[16px] bg-[#f8fbf9] px-3 py-3">
           <p className="text-[11px] font-medium text-slate">산출 가능</p>

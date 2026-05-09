@@ -6,6 +6,7 @@ import type {
   RebarPosition,
   RebarQuantityCandidateRecord,
   RebarQuantitySummary,
+  RebarSourceType,
   RebarSpecRecord
 } from "@/lib/estimation/types";
 
@@ -24,6 +25,42 @@ const coverMm = 40;
 const rebarDiameterPattern = "(?:H?D)\\s*-?\\s*(10|13|16|19|22|25|29|32)";
 const rebarCountRegex = new RegExp(`\\b(\\d{1,3})\\s*[- ]\\s*${rebarDiameterPattern}\\b`, "gi");
 const rebarSpacingRegex = new RegExp(`\\b${rebarDiameterPattern}\\s*@\\s*(\\d{2,4})\\b`, "gi");
+const structuralScheduleKeywords = [
+  "구조일람표",
+  "보일람표",
+  "기둥일람표",
+  "기초일람표",
+  "슬라브일람표",
+  "STRUCTURAL SCHEDULE",
+  "BEAM SCHEDULE",
+  "COLUMN SCHEDULE",
+  "FOOTING SCHEDULE"
+];
+const structuralPlanKeywords = [
+  "구조평면도",
+  "기초평면도",
+  "바닥구조평면도",
+  "FOUNDATION PLAN",
+  "FRAMING PLAN",
+  "SLAB PLAN"
+];
+const noiseKeywords = [
+  "일반사항",
+  "GENERAL NOTE",
+  "구조 일반사항",
+  "NOTE",
+  "정착",
+  "이음",
+  "갈고리",
+  "피복",
+  "SD400",
+  "콘크리트 강도",
+  "DESIGNED BY",
+  "APPROVED BY",
+  "REVISION DESCRIPTION",
+  "FCK",
+  "FY"
+];
 
 const memberTypeLabel: Record<RebarMemberType, string> = {
   beam: "보",
@@ -224,6 +261,82 @@ function hasRebarAnalysisKeyword(text: string): boolean {
   );
 }
 
+function normalizeSnippet(value: string | undefined): string {
+  return (value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase()
+    .slice(0, 120);
+}
+
+function includesKeyword(text: string, keywords: string[]): boolean {
+  const normalized = text.toUpperCase();
+
+  return keywords.some((keyword) => normalized.includes(keyword.toUpperCase()));
+}
+
+function inferRebarSourceType(pageText: string): RebarSourceType {
+  const drawingNoMatch = pageText.match(/\bS-(\d{3})\b/i);
+  const drawingNoNumber = drawingNoMatch ? Number(drawingNoMatch[1]) : null;
+
+  if (
+    includesKeyword(pageText, structuralScheduleKeywords) ||
+    drawingNoNumber === 301 ||
+    drawingNoNumber === 302 ||
+    drawingNoNumber === 303
+  ) {
+    return "structural_schedule";
+  }
+
+  if (
+    includesKeyword(pageText, structuralPlanKeywords) ||
+    (typeof drawingNoNumber === "number" && drawingNoNumber >= 200 && drawingNoNumber < 300)
+  ) {
+    return "structural_plan";
+  }
+
+  if (/구조|STRUCTURE|DETAIL|SECTION|ELEVATION|D10|D13|D16|D19|D22|D25|D29|D32/i.test(pageText)) {
+    return "other_structure";
+  }
+
+  return "unknown";
+}
+
+function getRebarSourcePriority(sourceType: RebarSourceType): number {
+  if (sourceType === "structural_schedule") return 3;
+  if (sourceType === "structural_plan") return 2;
+  if (sourceType === "other_structure") return 1;
+
+  return 0;
+}
+
+function hasScheduleReference(text: string): boolean {
+  return includesKeyword(text, structuralScheduleKeywords) || /\bS-30[1-3]\b/i.test(text);
+}
+
+function hasStrongRebarContext(text: string, sourceType: RebarSourceType): boolean {
+  const memberName = inferMemberName(text);
+  const section = parseSectionSize(text);
+
+  if (sourceType === "structural_schedule") {
+    return true;
+  }
+
+  if (sourceType === "structural_plan") {
+    return Boolean(memberName || section || hasScheduleReference(text));
+  }
+
+  return Boolean(memberName && section);
+}
+
+function isLikelyNoiseContext(text: string, sourceType: RebarSourceType): boolean {
+  if (!includesKeyword(text, noiseKeywords)) {
+    return false;
+  }
+
+  return sourceType !== "structural_schedule" && !hasStrongRebarContext(text, sourceType);
+}
+
 function createStableId(parts: Array<string | number | undefined>): string {
   const source = parts.filter(Boolean).join("|");
   let hash = 0;
@@ -240,12 +353,24 @@ function createBaseSpec(args: {
   context: string;
   sourceFileName?: string;
   sourcePage?: number;
+  rebarSourceType: RebarSourceType;
   pattern: { diameter: string; rawText: string; count?: number; spacingMm?: number };
 }): RebarSpecRecord {
   const section = parseSectionSize(args.context);
   const memberName = inferMemberName(args.context);
   const memberType = inferMemberType(args.context, memberName);
   const memberCount = parseMemberCountCandidate(args.context);
+  const hasNoiseKeyword = includesKeyword(args.context, noiseKeywords);
+  const confidence =
+    args.rebarSourceType === "structural_schedule"
+      ? hasNoiseKeyword
+        ? 0.5
+        : memberType === "unknown"
+          ? 0.6
+          : 0.76
+      : memberType === "unknown"
+        ? 0.42
+        : 0.58;
 
   return {
     id: createStableId([
@@ -275,7 +400,8 @@ function createBaseSpec(args: {
     position: inferRebarPosition(args.context),
     rawText: args.pattern.rawText,
     sourceTextSnippet: args.context,
-    confidence: memberType === "unknown" ? 0.52 : 0.68
+    rebarSourceType: args.rebarSourceType,
+    confidence
   };
 }
 
@@ -292,9 +418,21 @@ function getPatternContext(line: string, fallbackContext: string, patternIndex: 
 
 export function extractRebarSpecsFromText(
   text: string,
-  options?: { sourceFileName?: string; sourcePage?: number }
+  options?: {
+    sourceFileName?: string;
+    sourcePage?: number;
+    rebarSourceType?: RebarSourceType;
+    hasStructuralSchedulePages?: boolean;
+  }
 ): RebarSpecRecord[] {
   if (!hasRebarAnalysisKeyword(text)) {
+    return [];
+  }
+
+  const rebarSourceType = options?.rebarSourceType ?? inferRebarSourceType(text);
+  const sourcePriority = getRebarSourcePriority(rebarSourceType);
+
+  if (sourcePriority <= 0 || (options?.hasStructuralSchedulePages && sourcePriority <= 1)) {
     return [];
   }
 
@@ -315,40 +453,70 @@ export function extractRebarSpecsFromText(
     const context = lines.slice(Math.max(0, index - 2), index + 3).join(" ");
 
     countPatterns.forEach((pattern) => {
+      const patternContext = getPatternContext(line, context, pattern.index);
+
+      if (
+        isLikelyNoiseContext(patternContext, rebarSourceType) ||
+        (rebarSourceType !== "structural_schedule" &&
+          !hasStrongRebarContext(patternContext, rebarSourceType))
+      ) {
+        return;
+      }
+
       specs.push(
         createBaseSpec({
           line,
-          context: getPatternContext(line, context, pattern.index),
+          context: patternContext,
           sourceFileName: options?.sourceFileName,
           sourcePage: options?.sourcePage,
+          rebarSourceType,
           pattern
         })
       );
     });
 
     spacingPatterns.forEach((pattern) => {
+      const patternContext = getPatternContext(line, context, pattern.index);
+
+      if (
+        isLikelyNoiseContext(patternContext, rebarSourceType) ||
+        (rebarSourceType !== "structural_schedule" &&
+          !hasStrongRebarContext(patternContext, rebarSourceType))
+      ) {
+        return;
+      }
+
       specs.push(
         createBaseSpec({
           line,
-          context: getPatternContext(line, context, pattern.index),
+          context: patternContext,
           sourceFileName: options?.sourceFileName,
           sourcePage: options?.sourcePage,
+          rebarSourceType,
           pattern
         })
       );
     });
   });
 
+  return dedupeRebarSpecs(specs);
+}
+
+function dedupeRebarSpecs(specs: RebarSpecRecord[]): RebarSpecRecord[] {
   const seen = new Set<string>();
 
   return specs.filter((spec) => {
     const key = [
       spec.sourceFileName,
       spec.sourcePage,
-      spec.rawText,
       spec.memberName,
+      spec.memberType,
       spec.position,
-      spec.sourceTextSnippet
+      spec.diameter,
+      spec.barCount ?? "",
+      spec.spacingMm ?? "",
+      spec.lengthMm ?? spec.heightMm ?? "",
+      normalizeSnippet(spec.sourceTextSnippet ?? spec.rawText)
     ].join("|");
 
     if (seen.has(key)) {
@@ -364,23 +532,44 @@ export function extractRebarSpecsFromPdfPages(
   pages: PdfPageTextRecord[],
   sourceFileName?: string
 ): RebarSpecRecord[] {
-  return pages.reduce<RebarSpecRecord[]>((records, page) => {
+  const pageSources = pages.map((page) => {
+    const rebarSourceType = inferRebarSourceType(page.text);
+
+    return {
+      page,
+      rebarSourceType,
+      priority: getRebarSourcePriority(rebarSourceType)
+    };
+  });
+  const hasStructuralSchedulePages = pageSources.some(({ priority }) => priority === 3);
+
+  const specs = pageSources.reduce<RebarSpecRecord[]>((records, source) => {
+    if (source.priority <= 0 || (hasStructuralSchedulePages && source.priority <= 1)) {
+      return records;
+    }
+
     return [
       ...records,
-      ...extractRebarSpecsFromText(page.text, {
+      ...extractRebarSpecsFromText(source.page.text, {
         sourceFileName,
-        sourcePage: page.pageNumber
+        sourcePage: source.page.pageNumber,
+        rebarSourceType: source.rebarSourceType,
+        hasStructuralSchedulePages
       })
     ];
   }, []);
+
+  return dedupeRebarSpecs(specs);
 }
 
 export function extractRebarSpecsFromPdfResults(
   results: PdfTextExtractionResult[]
 ): RebarSpecRecord[] {
-  return results.reduce<RebarSpecRecord[]>((records, result) => {
+  const specs = results.reduce<RebarSpecRecord[]>((records, result) => {
     return [...records, ...extractRebarSpecsFromPdfPages(result.pages, result.fileName)];
   }, []);
+
+  return dedupeRebarSpecs(specs);
 }
 
 function createReviewCandidate(
@@ -425,7 +614,8 @@ function createReviewCandidate(
     quantityReviewRequired: true,
     note,
     rawText: spec.rawText,
-    sourceTextSnippet: spec.sourceTextSnippet
+    sourceTextSnippet: spec.sourceTextSnippet,
+    rebarSourceType: spec.rebarSourceType ?? "unknown"
   };
 }
 
@@ -563,17 +753,47 @@ export function recalculateRebarQuantityCandidate(
 export function buildRebarQuantityCandidates(
   specs: RebarSpecRecord[]
 ): RebarQuantityCandidateRecord[] {
-  return specs.reduce<RebarQuantityCandidateRecord[]>((candidates, spec) => {
+  const candidates = specs.reduce<RebarQuantityCandidateRecord[]>((records, spec) => {
     const unitWeight = spec.diameter ? getRebarUnitWeight(spec.diameter) : null;
 
     if (!spec.diameter || !unitWeight) {
-      return candidates;
+      return records;
     }
 
     const candidate = createReviewCandidate(spec, unitWeight, "철근 수량 산출 조건 검토 필요");
 
-    return [...candidates, recalculateRebarQuantityCandidate(candidate)];
+    return [...records, recalculateRebarQuantityCandidate(candidate)];
   }, []);
+
+  return dedupeRebarQuantityCandidates(candidates);
+}
+
+export function dedupeRebarQuantityCandidates(
+  candidates: RebarQuantityCandidateRecord[]
+): RebarQuantityCandidateRecord[] {
+  const seen = new Set<string>();
+
+  return candidates.filter((candidate) => {
+    const key = [
+      candidate.sourceFileName,
+      candidate.sourcePage,
+      candidate.memberName,
+      candidate.memberType,
+      candidate.position,
+      candidate.diameter,
+      candidate.barCount ?? "",
+      candidate.spacingMm ?? "",
+      candidate.memberLengthMm ?? candidate.memberHeightMm ?? "",
+      normalizeSnippet(candidate.sourceTextSnippet ?? candidate.rawText)
+    ].join("|");
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }
 
 export function summarizeRebarQuantityCandidates(

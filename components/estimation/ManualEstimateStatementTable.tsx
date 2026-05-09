@@ -36,6 +36,10 @@ function formatNumber(value: number) {
   return value.toLocaleString("ko-KR");
 }
 
+function formatWon(value: number) {
+  return `${formatNumber(value)}원`;
+}
+
 function getQuantityLabel(item: ManualEstimateStatementItemRecord) {
   return item.quantityReviewRequired || item.quantity <= 0
     ? "수량 확인 필요"
@@ -44,7 +48,7 @@ function getQuantityLabel(item: ManualEstimateStatementItemRecord) {
 
 function getAmountLabel(item: ManualEstimateStatementItemRecord) {
   if (item.status === "calculated" && typeof item.amount === "number") {
-    return formatNumber(item.amount);
+    return formatWon(item.amount);
   }
 
   if (item.status === "quantity_review_required") {
@@ -103,7 +107,7 @@ export function ManualEstimateStatementTable({
         <div className="rounded-[16px] bg-[#f8fbf9] px-3 py-3">
           <p className="text-[11px] font-medium text-slate">총 금액</p>
           <p className="mt-1 text-[18px] font-bold text-foreground">
-            {formatNumber(summary.totalAmount)}
+            {formatWon(summary.totalAmount)}
           </p>
         </div>
       </div>
@@ -142,17 +146,20 @@ export function ManualEstimateStatementTable({
                 <td className="px-2 py-4 text-[13px] text-foreground">{getQuantityLabel(item)}</td>
                 <td className="px-2 py-4 text-[13px] text-foreground">{item.unit || "-"}</td>
                 <td className="px-2 py-4">
-                  <input
-                    className="h-10 w-32 rounded-[10px] border border-border bg-white px-3 text-right text-[13px] font-semibold text-foreground outline-none transition focus:border-primary"
-                    inputMode="decimal"
-                    min="0"
-                    onChange={(event) =>
-                      onChangeUnitPrice(item.sourceEstimateItemId, event.target.value)
-                    }
-                    placeholder="단가 입력"
-                    type="number"
-                    value={unitPriceInputs[item.sourceEstimateItemId] ?? ""}
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="h-10 w-36 rounded-[10px] border border-border bg-white px-3 text-right text-[13px] font-semibold text-foreground outline-none transition focus:border-primary"
+                      inputMode="decimal"
+                      min="0"
+                      onChange={(event) =>
+                        onChangeUnitPrice(item.sourceEstimateItemId, event.target.value)
+                      }
+                      placeholder="공사단가 입력"
+                      type="number"
+                      value={unitPriceInputs[item.sourceEstimateItemId] ?? ""}
+                    />
+                    <span className="text-[12px] font-semibold text-slate">원</span>
+                  </div>
                 </td>
                 <td className="px-2 py-4 text-[13px] font-semibold text-foreground">
                   {getAmountLabel(item)}

@@ -64,6 +64,12 @@ export type RebarPosition =
 
 export type RebarReviewStatus = "pending" | "accepted" | "rejected";
 
+export type RebarSourceType =
+  | "structural_schedule"
+  | "structural_plan"
+  | "other_structure"
+  | "unknown";
+
 export type DrawingDiscipline =
   | "architecture"
   | "structure"
@@ -306,6 +312,7 @@ export interface RebarSpecRecord {
   position: RebarPosition;
   rawText: string;
   sourceTextSnippet?: string;
+  rebarSourceType?: RebarSourceType;
   confidence: number;
 }
 
@@ -343,6 +350,7 @@ export interface RebarQuantityCandidateRecord {
   note?: string;
   rawText?: string;
   sourceTextSnippet?: string;
+  rebarSourceType?: RebarSourceType;
 }
 
 export interface RebarQuantitySummary {
