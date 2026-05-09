@@ -17,6 +17,7 @@ import { DrawingExtractionTable } from "@/components/estimation/DrawingExtractio
 import { DrawingIntelligencePanel } from "@/components/estimation/DrawingIntelligencePanel";
 import { DrawingUploadPanel } from "@/components/estimation/DrawingUploadPanel";
 import { EstimateItemsTable } from "@/components/estimation/EstimateItemsTable";
+import { EstimateStatementTable } from "@/components/estimation/EstimateStatementTable";
 import { EstimationDataStrategyCard } from "@/components/estimation/EstimationDataStrategyCard";
 import { IfcExpansionNotice } from "@/components/estimation/IfcExpansionNotice";
 import { ManualEstimateStatementTable } from "@/components/estimation/ManualEstimateStatementTable";
@@ -38,6 +39,7 @@ import {
   extractDrawingSheetIndexesFromPdfResults
 } from "@/lib/estimation/drawing-intelligence";
 import {
+  exportEstimateStatementToExcel,
   exportEstimateToCsv,
   exportEstimateToExcel,
   exportManualEstimateStatementToExcel,
@@ -55,6 +57,7 @@ import {
 } from "@/lib/estimation/sample-data";
 import {
   buildScheduleCategorySummaries,
+  buildEstimateStatementItems,
   createCandidatesFromPdfText,
   createDrawingFileRecordFromFile,
   createManualStandardMatchOptions,
@@ -63,7 +66,8 @@ import {
   extractPdfTextFromFile,
   getApprovedEstimateCandidates,
   getDrawingFileType,
-  isManualStandardMatchTarget
+  isManualStandardMatchTarget,
+  summarizeEstimateStatementItems
 } from "@/lib/estimation/service";
 import { parseArchitectureUnitPriceWorkbook } from "@/lib/estimation/unit-price-parser";
 import type {
@@ -300,6 +304,14 @@ export function EstimationDashboard() {
   const manualEstimateStatementSummary = useMemo(
     () => summarizeManualEstimateStatementItems(manualEstimateStatementItems),
     [manualEstimateStatementItems]
+  );
+  const estimateStatementItems = useMemo(
+    () => buildEstimateStatementItems(estimateItems, unitPrices),
+    [estimateItems, unitPrices]
+  );
+  const estimateStatementSummary = useMemo(
+    () => summarizeEstimateStatementItems(estimateStatementItems),
+    [estimateStatementItems]
   );
   const uploadedPdfPendingMatchCount = displayedMatches.filter(
     (match) =>
@@ -1014,6 +1026,15 @@ export function EstimationDashboard() {
                         parseStatus={unitPriceParseStatus}
                       />
                     </div>
+                    {unitPrices.length > 0 ? (
+                      <div className="mt-4">
+                        <EstimateStatementTable
+                          items={estimateStatementItems}
+                          onExportExcel={() => exportEstimateStatementToExcel(estimateStatementItems)}
+                          summary={estimateStatementSummary}
+                        />
+                      </div>
+                    ) : null}
                   </details>
                 </>
               ) : (

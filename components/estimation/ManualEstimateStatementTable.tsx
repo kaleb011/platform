@@ -79,7 +79,7 @@ export function ManualEstimateStatementTable({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <div className="rounded-[16px] bg-[#f8fbf9] px-3 py-3">
           <p className="text-[11px] font-medium text-slate">전체 항목</p>
           <p className="mt-1 text-[18px] font-bold text-foreground">{summary.totalCount}</p>
@@ -92,6 +92,12 @@ export function ManualEstimateStatementTable({
           <p className="text-[11px] font-medium text-[#7a4a05]">단가 입력 필요</p>
           <p className="mt-1 text-[18px] font-bold text-[#7a4a05]">
             {summary.unitPriceRequiredCount}
+          </p>
+        </div>
+        <div className="rounded-[16px] bg-[#fff8ea] px-3 py-3">
+          <p className="text-[11px] font-medium text-[#7a4a05]">수량 확인 필요</p>
+          <p className="mt-1 text-[18px] font-bold text-[#7a4a05]">
+            {summary.quantityReviewRequiredCount}
           </p>
         </div>
         <div className="rounded-[16px] bg-[#f8fbf9] px-3 py-3">
@@ -139,6 +145,7 @@ export function ManualEstimateStatementTable({
                   <input
                     className="h-10 w-32 rounded-[10px] border border-border bg-white px-3 text-right text-[13px] font-semibold text-foreground outline-none transition focus:border-primary"
                     inputMode="decimal"
+                    min="0"
                     onChange={(event) =>
                       onChangeUnitPrice(item.sourceEstimateItemId, event.target.value)
                     }
