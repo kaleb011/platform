@@ -4,6 +4,9 @@ import type {
   EstimateStatementItemRecord,
   ManualEstimateStatementItemRecord,
   RebarQuantityCandidateRecord,
+  RebarStandardEstimateItem,
+  RebarStandardSettings,
+  RebarStandardSummary,
   StatementReviewStatus
 } from "@/lib/estimation/types";
 
@@ -446,6 +449,156 @@ export function exportRebarQuantityCandidatesToExcel(
           </thead>
           <tbody>${rows}</tbody>
         </table>
+      </body>
+    </html>
+  `;
+
+  downloadBlob(
+    new Blob(["\uFEFF", html], { type: "application/vnd.ms-excel;charset=utf-8;" }),
+    fileName
+  );
+}
+
+const rebarStandardTypeLabel = {
+  building_type_1: "건축 Type-I",
+  building_type_2: "건축 Type-II",
+  civil_type_1: "토목 Type-I",
+  civil_type_2: "토목 Type-II",
+  civil_type_3: "토목 Type-III"
+} as const;
+
+const rebarReviewStatusLabel = {
+  calculated: "산출 가능",
+  price_required: "단가 입력 필요",
+  quantity_required: "수량 확인 필요",
+  separate_input_required: "별도계상 필요"
+} as const;
+
+const rebarCategoryLabel = {
+  material: "재료비",
+  labor: "노무비",
+  expense: "경비",
+  consumable: "소모재료",
+  separate: "별도계상"
+} as const;
+
+function renderExcelTable(headers: string[], rows: Array<Array<string | number>>) {
+  return `
+    <table border="1">
+      <thead>
+        <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map(
+            (row) => `
+              <tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>
+            `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+export function exportRebarStandardEstimateToExcel(
+  summary: RebarStandardSummary,
+  settings: RebarStandardSettings,
+  items: RebarStandardEstimateItem[],
+  fileName = "rebar-standard-estimate.xls"
+) {
+  const quantityRows = Object.entries(summary.diameterWeightsKg)
+    .sort(([left], [right]) => Number(left.slice(1)) - Number(right.slice(1)))
+    .map(([diameter, weightKg]) => [
+      diameter,
+      weightKg,
+      summary.diameterWeightsTon[diameter] ?? 0,
+      Number(diameter.replace(/\D/g, "")) <= 13 ? "Y" : "N",
+      "승인된 철근 수량 기준"
+    ]);
+
+  const settingRows: Array<Array<string | number>> = [
+    ["공사구분", settings.projectType === "building" ? "건축" : "토목", ""],
+    ["추천 Type", rebarStandardTypeLabel[summary.recommendedType], summary.recommendationReason],
+    ["적용 Type", rebarStandardTypeLabel[settings.selectedType], ""],
+    ["D13 이하 비율", `${summary.underD13Ratio}%`, ""],
+    ["철골 병행 여부", settings.steelConcurrent ? "Y" : "N", ""],
+    ["복잡 구조시설물 여부", settings.complexStructure ? "Y" : "N", ""],
+    ["현장가공/공장가공", settings.processingMethod === "site_processing" ? "현장가공" : "공장가공", "공장가공은 후속 반영"],
+    ["철근공 노임단가", settings.rebarWorkerWage ?? "", "원/인"],
+    ["보통인부 노임단가", settings.commonWorkerWage ?? "", "원/인"]
+  ];
+
+  const estimateRows = items.map((item) => [
+    rebarCategoryLabel[item.category],
+    item.workCategory,
+    item.itemName,
+    item.itemName,
+    item.specification,
+    item.quantity,
+    item.unit,
+    item.materialCost,
+    item.laborCost,
+    item.expenseCost,
+    item.totalCost,
+    item.standardCode,
+    item.basis,
+    rebarReviewStatusLabel[item.reviewStatus],
+    item.note ?? ""
+  ]);
+
+  const separateRows = items
+    .filter(
+      (item) =>
+        item.category === "separate" ||
+        item.reviewStatus === "separate_input_required" ||
+        ["크레인 양중비", "현장 내 운반비", "shop drawing 작성비"].includes(item.itemName)
+    )
+    .map((item) => [
+      item.itemName,
+      item.quantity,
+      item.unit,
+      item.totalCost,
+      rebarReviewStatusLabel[item.reviewStatus],
+      item.note ?? item.basis
+    ]);
+
+  const html = `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+      </head>
+      <body>
+        <h3>철근 수량 집계</h3>
+        ${renderExcelTable(["직경", "수량 kg", "수량 ton", "D13 이하 여부", "비고"], quantityRows)}
+
+        <h3>품셈 적용 설정</h3>
+        ${renderExcelTable(["항목", "값", "비고"], settingRows)}
+
+        <h3>철근 품셈 산출내역</h3>
+        ${renderExcelTable(
+          [
+            "구분",
+            "공종",
+            "세부공종",
+            "품명",
+            "규격",
+            "수량",
+            "단위",
+            "재료비",
+            "노무비",
+            "경비",
+            "합계금액",
+            "품셈근거",
+            "산출근거",
+            "검토상태",
+            "비고"
+          ],
+          estimateRows
+        )}
+
+        <h3>별도계상 항목</h3>
+        ${renderExcelTable(["항목", "수량", "단위", "금액", "상태", "비고"], separateRows)}
       </body>
     </html>
   `;

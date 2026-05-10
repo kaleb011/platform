@@ -24,6 +24,7 @@ import { ManualEstimateStatementTable } from "@/components/estimation/ManualEsti
 import { ManualStandardMatchReview } from "@/components/estimation/ManualStandardMatchReview";
 import { PdfTextExtractionSummary } from "@/components/estimation/PdfTextExtractionSummary";
 import { RebarQuantityReview } from "@/components/estimation/RebarQuantityReview";
+import { RebarStandardEstimatePanel } from "@/components/estimation/RebarStandardEstimatePanel";
 import { ScheduleForecastDashboard } from "@/components/estimation/ScheduleForecastDashboard";
 import { StandardMatchTable } from "@/components/estimation/StandardMatchTable";
 import { UnitPriceUploadPanel } from "@/components/estimation/UnitPriceUploadPanel";
@@ -946,6 +947,7 @@ export function EstimationDashboard() {
                     onChangeStatus={handleRebarCandidateStatusChange}
                     onExportExcel={() => exportRebarQuantityCandidatesToExcel(activeRebarCandidates)}
                   />
+                  <RebarStandardEstimatePanel approvedRebarItems={approvedRebarEstimateItems} />
                   <DrawingExtractionTable
                     candidates={visibleCandidates}
                     onChangeStatus={handleCandidateStatusChange}

@@ -362,6 +362,69 @@ export interface RebarQuantitySummary {
   totalTon: number;
 }
 
+export type RebarStandardType =
+  | "building_type_1"
+  | "building_type_2"
+  | "civil_type_1"
+  | "civil_type_2"
+  | "civil_type_3";
+
+export type RebarProcessingMethod = "site_processing" | "factory_processing";
+
+export interface RebarStandardSettings {
+  projectType: "building" | "civil";
+  recommendedType: RebarStandardType;
+  selectedType: RebarStandardType;
+  processingMethod: RebarProcessingMethod;
+  steelConcurrent: boolean;
+  complexStructure: boolean;
+  rebarWorkerWage?: number;
+  commonWorkerWage?: number;
+  rebarMaterialUnitPrices: Record<string, number | undefined>;
+  bindingWireUnitPrice?: number;
+  spacerQuantity?: number;
+  spacerUnit?: "EA" | "식";
+  spacerUnitPrice?: number;
+  craneCost?: number;
+  transportCost?: number;
+  shopDrawingCost?: number;
+  extraNote?: string;
+}
+
+export interface RebarStandardSummary {
+  totalWeightKg: number;
+  totalWeightTon: number;
+  underD13WeightKg: number;
+  underD13Ratio: number;
+  recommendedType: RebarStandardType;
+  recommendationReason: string;
+  diameterWeightsKg: Record<string, number>;
+  diameterWeightsTon: Record<string, number>;
+}
+
+export interface RebarStandardEstimateItem {
+  id: string;
+  category: "material" | "labor" | "expense" | "consumable" | "separate";
+  workCategory: string;
+  itemName: string;
+  specification: string;
+  quantity: number;
+  unit: string;
+  materialCost: number;
+  laborCost: number;
+  expenseCost: number;
+  totalCost: number;
+  unitPrice?: number;
+  basis: string;
+  standardCode: string;
+  reviewStatus:
+    | "calculated"
+    | "price_required"
+    | "quantity_required"
+    | "separate_input_required";
+  note?: string;
+}
+
 export interface DrawingSheetIndexRecord {
   id: string;
   sourcePage: number;
