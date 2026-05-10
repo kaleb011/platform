@@ -6,6 +6,7 @@ import type {
   RebarPosition,
   RebarQuantityCandidateRecord,
   RebarQuantitySummary,
+  RebarReviewStatus,
   RebarSourceType,
   RebarSpecRecord
 } from "@/lib/estimation/types";
