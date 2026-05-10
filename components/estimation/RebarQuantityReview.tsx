@@ -301,7 +301,10 @@ function RebarCandidateCard({
       <div className="mt-4 grid grid-cols-3 gap-2">
         <Button
           className="min-h-[38px] rounded-[14px] px-2 text-[12px]"
-          onClick={() => onChangeStatus(candidate.id, "accepted")}
+          onClick={() => {
+            onChangeCandidate(candidate.id, candidate);
+            onChangeStatus(candidate.id, "accepted");
+          }}
           variant="secondary"
         >
           <Check className="mr-1 h-3.5 w-3.5" />

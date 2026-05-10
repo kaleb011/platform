@@ -45,7 +45,9 @@ function isApprovedRebarItem(item: ApprovedRebarSource) {
       item.reviewStatus === "accepted" &&
       item.quantity > 0 &&
       !item.quantityReviewRequired &&
-      (item.matchSource === "rebar" || /철근|rebar|D\s*-?\s*\d{2}/i.test(text))
+      (item.matchSource === "rebar" ||
+        item.workCategory === "철근콘크리트공사" ||
+        /철근|rebar|D\s*-?\s*\d{2}/i.test(text))
     );
   }
 
@@ -68,11 +70,13 @@ function getItemQuantityKg(item: ApprovedRebarSource) {
     return item.quantityKg;
   }
 
-  if (item.unit.toLowerCase() === "ton") {
+  const unit = item.unit.toLowerCase();
+
+  if (unit === "ton" || unit === "t") {
     return item.quantity * 1000;
   }
 
-  return item.quantity;
+  return unit === "kg" ? item.quantity : 0;
 }
 
 function isUnderD13(diameter: string) {

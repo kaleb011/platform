@@ -690,6 +690,22 @@ export function recalculateRebarQuantityCandidate(
     };
   }
 
+  if (candidate.memberType === "footing" && candidate.barCount && candidate.memberLengthMm) {
+    const lengthM = candidate.memberLengthMm / 1000;
+    const quantityKg = candidate.barCount * lengthM * unitWeight * memberCount;
+
+    return {
+      ...base,
+      quantityKg: roundQuantity(quantityKg, 2),
+      quantityTon: roundQuantity(quantityKg / 1000, 4),
+      calculationFormula: `${candidate.diameter} ${candidate.barCount}본 x ${roundQuantity(lengthM, 3)}m x ${unitWeight}kg/m x ${memberCount}EA = ${roundQuantity(quantityKg, 2)}kg`,
+      calculationBasis:
+        "기초 개수형 철근 후보: 정착·이음·갈고리 길이는 별도 검토 필요.",
+      quantityReviewRequired: false,
+      note: "정착·이음·갈고리 길이 별도 검토 필요"
+    };
+  }
+
   if (candidate.memberType === "footing" && candidate.spacingMm && candidate.footingWidthMm && candidate.footingLengthMm) {
     if (candidate.position !== "x" && candidate.position !== "y") {
       return fail("기초 철근 X/Y 방향 확인 필요");
@@ -748,6 +764,30 @@ export function recalculateRebarQuantityCandidate(
   }
 
   return fail("개수형 철근 산출에 필요한 부재 길이 또는 높이 확인 필요");
+}
+
+export function applyRebarCandidateReviewStatus(
+  candidate: RebarQuantityCandidateRecord,
+  reviewStatus: RebarReviewStatus
+): RebarQuantityCandidateRecord {
+  const recalculated = recalculateRebarQuantityCandidate(candidate);
+  const hasCalculatedQuantity =
+    Number.isFinite(recalculated.quantityKg) && recalculated.quantityKg > 0;
+
+  if (reviewStatus !== "accepted") {
+    return {
+      ...recalculated,
+      reviewStatus
+    };
+  }
+
+  return {
+    ...recalculated,
+    quantityKg: hasCalculatedQuantity ? recalculated.quantityKg : 0,
+    quantityTon: hasCalculatedQuantity ? roundQuantity(recalculated.quantityKg / 1000, 4) : 0,
+    quantityReviewRequired: !hasCalculatedQuantity,
+    reviewStatus: "accepted"
+  };
 }
 
 export function buildRebarQuantityCandidates(
@@ -833,33 +873,47 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
 ): EstimateItemRecord[] {
   return candidates
     .filter((candidate) => candidate.reviewStatus === "accepted")
-    .map((candidate) => ({
-      id: `rebar-estimate-${candidate.id}`,
-      drawingFileId: `rebar-${candidate.sourceFileName ?? "uploaded-pdf"}`,
-      drawingPageId: `rebar-page-${candidate.sourcePage ?? "unknown"}`,
-      standardItemId: "rebar-quantity-rule",
-      workCategory: "철근콘크리트공사",
-      itemName: "철근 가공 및 조립",
-      specification: [candidate.diameter, memberTypeLabel[candidate.memberType], candidate.memberName]
-        .filter(Boolean)
-        .join(" / "),
-      quantity: candidate.quantityKg,
-      unit: "kg",
-      calculationBasis: candidate.calculationFormula,
-      sourceNote: candidate.calculationBasis,
-      reviewStatus: "accepted",
-      standardItemName: "철근 가공 및 조립",
-      drawingNo: candidate.sourcePage ? `PDF p.${candidate.sourcePage}` : "",
-      drawingTitle: "구조일람표 기반 철근 수량 산출 후보",
-      remark:
-        "철근 수량 산출 후보 기반 / 정착·이음·갈고리 길이 별도 검토 필요 / 사용자 검토 후 승인",
-      sourceCandidateId: candidate.id,
-      sourceFileName: candidate.sourceFileName ?? null,
-      sourcePage: candidate.sourcePage ?? null,
-      quantityReviewRequired: candidate.quantityReviewRequired,
-      matchSource: "rebar",
-      standardCode: null
-    }));
+    .map((candidate) => {
+      const recalculated = recalculateRebarQuantityCandidate(candidate);
+      const hasCalculatedQuantity =
+        Number.isFinite(recalculated.quantityKg) &&
+        recalculated.quantityKg > 0 &&
+        !recalculated.quantityReviewRequired;
+      const quantityKg = hasCalculatedQuantity ? recalculated.quantityKg : 0;
+
+      return {
+        id: `rebar-estimate-${candidate.id}`,
+        drawingFileId: `rebar-${candidate.sourceFileName ?? "uploaded-pdf"}`,
+        drawingPageId: `rebar-page-${candidate.sourcePage ?? "unknown"}`,
+        standardItemId: "rebar-quantity-rule",
+        workCategory: "철근콘크리트공사",
+        itemName: "철근 가공 및 조립",
+        specification: [
+          recalculated.diameter,
+          memberTypeLabel[recalculated.memberType],
+          recalculated.memberName
+        ]
+          .filter(Boolean)
+          .join(" / "),
+        quantity: quantityKg,
+        unit: "kg",
+        calculationBasis: recalculated.calculationFormula,
+        sourceNote: recalculated.calculationBasis,
+        reviewStatus: "accepted",
+        standardItemName: "철근 가공 및 조립",
+        drawingNo: recalculated.sourcePage ? `PDF p.${recalculated.sourcePage}` : "",
+        drawingTitle: "구조일람표 기반 철근 수량 산출 후보",
+        remark: hasCalculatedQuantity
+          ? "rebar_quantity / 사용자 검토 후 승인 / 철근 산출 후보 기반"
+          : "rebar_quantity / 사용자 검토 후 승인 / 수량 확인 필요",
+        sourceCandidateId: recalculated.id,
+        sourceFileName: recalculated.sourceFileName ?? null,
+        sourcePage: recalculated.sourcePage ?? null,
+        quantityReviewRequired: !hasCalculatedQuantity,
+        matchSource: "rebar",
+        standardCode: null
+      };
+    });
 }
 
 export function getRebarMemberTypeLabel(memberType: RebarMemberType): string {

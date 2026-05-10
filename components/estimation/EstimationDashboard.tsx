@@ -47,6 +47,7 @@ import {
   exportRebarQuantityCandidatesToExcel
 } from "@/lib/estimation/export-estimate";
 import {
+  applyRebarCandidateReviewStatus,
   buildRebarQuantityCandidates,
   createEstimateItemsFromAcceptedRebarCandidates,
   extractRebarSpecsFromPdfResults,
@@ -611,12 +612,14 @@ export function EstimationDashboard() {
   ) => {
     setRebarCandidates((current) =>
       current.map((candidate) =>
-        candidate.id === candidateId ? { ...candidate, reviewStatus } : candidate
+        candidate.id === candidateId
+          ? applyRebarCandidateReviewStatus(candidate, reviewStatus)
+          : candidate
       )
     );
     setNotice(
       reviewStatus === "accepted"
-        ? "철근 수량 산출 후보를 승인했습니다. 승인된 물량내역과 금액 포함 적산내역서 흐름에 반영됩니다."
+        ? "철근 수량 산출 후보를 최신 보정값으로 재계산한 뒤 승인했습니다. 계산 가능한 수량은 승인된 물량내역과 품셈 산출에 반영됩니다."
         : "철근 수량 산출 후보 검토 상태를 변경했습니다."
     );
   };
