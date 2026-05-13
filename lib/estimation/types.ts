@@ -60,6 +60,16 @@ export type RebarPosition =
   | "tie"
   | "x"
   | "y"
+  | "x_bottom"
+  | "y_bottom"
+  | "x_top"
+  | "y_top"
+  | "distribution"
+  | "opening_reinforcement"
+  | "vertical"
+  | "horizontal"
+  | "u_bar"
+  | "c_bar"
   | "unknown";
 
 export type RebarReviewStatus = "pending" | "accepted" | "rejected";
@@ -342,6 +352,13 @@ export interface RebarQuantityCandidateRecord {
   sectionDepthMm?: number;
   footingWidthMm?: number;
   footingLengthMm?: number;
+  slabLengthMm?: number;
+  slabWidthMm?: number;
+  slabThicknessMm?: number;
+  wallLengthMm?: number;
+  wallHeightMm?: number;
+  wallThicknessMm?: number;
+  directBarLengthMm?: number;
   coverMm?: number;
   anchorageLengthMm?: number;
   spliceLengthMm?: number;

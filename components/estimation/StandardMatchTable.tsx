@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Pencil, SearchX, X } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,10 @@ export function StandardMatchTable({
   standardItems,
   onChangeStatus
 }: StandardMatchTableProps) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleMatches = useMemo(() => (expanded ? matches : matches.slice(0, 5)), [expanded, matches]);
+  const canToggle = matches.length > 5;
+
   return (
     <Card className="section-enter">
       <SectionHeading
@@ -79,7 +84,7 @@ export function StandardMatchTable({
             </tr>
           </thead>
           <tbody>
-            {matches.map((match) => {
+            {visibleMatches.map((match) => {
               const candidate = candidates.find((item) => item.id === match.drawingExtractionId);
               const standardItem = standardItems.find((item) => item.id === match.standardItemId);
 
@@ -164,6 +169,20 @@ export function StandardMatchTable({
             })}
           </tbody>
         </table>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold text-slate">
+        <span>전체 {matches.length}개 중 {visibleMatches.length}개 표시</span>
+        {canToggle ? (
+          <Button
+            aria-expanded={expanded}
+            className="min-h-[34px] rounded-[12px] px-3 text-[12px]"
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
+            variant="ghost"
+          >
+            {expanded ? "▼ 간략히 보기" : "▶ 전체 보기"}
+          </Button>
+        ) : null}
       </div>
     </Card>
   );

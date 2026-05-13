@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, FileSpreadsheet } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,10 @@ export function EstimateItemsTable({
   onExportCsv,
   onExportExcel
 }: EstimateItemsTableProps) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleItems = useMemo(() => (expanded ? items : items.slice(0, 5)), [expanded, items]);
+  const canToggle = items.length > 5;
+
   return (
     <Card className="section-enter">
       <SectionHeading
@@ -114,7 +119,7 @@ export function EstimateItemsTable({
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <tr key={item.id} className="border-b border-border/70 align-top">
                 <td className="px-2 py-4 text-[13px] font-semibold text-foreground">
                   {item.workCategory}
@@ -147,6 +152,20 @@ export function EstimateItemsTable({
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold text-slate">
+        <span>전체 {items.length}개 중 {visibleItems.length}개 표시</span>
+        {canToggle ? (
+          <Button
+            aria-expanded={expanded}
+            className="min-h-[34px] rounded-[12px] px-3 text-[12px]"
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
+            variant="ghost"
+          >
+            {expanded ? "▼ 간략히 보기" : "▶ 전체 보기"}
+          </Button>
+        ) : null}
       </div>
     </Card>
   );

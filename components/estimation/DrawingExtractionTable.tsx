@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { CollapsibleResultList } from "@/components/estimation/CollapsibleResultList";
 import {
   filterExtractionCandidates,
   getCandidateDisplayTitle,
@@ -238,21 +239,18 @@ export function DrawingExtractionTable({
         })}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3">
-        {filteredCandidates.map((candidate) => (
+      <CollapsibleResultList
+        className="mt-4"
+        emptyMessage="선택한 필터에 해당하는 후보가 없습니다."
+        items={filteredCandidates}
+        renderItem={(candidate) => (
           <CandidateReviewCard
             key={candidate.id}
             candidate={candidate}
             onChangeStatus={onChangeStatus}
           />
-        ))}
-      </div>
-
-      {filteredCandidates.length === 0 ? (
-        <div className="mt-4 rounded-[18px] border border-dashed border-border bg-[#f8fbf9] px-4 py-6 text-center text-[13px] text-slate">
-          선택한 필터에 해당하는 후보가 없습니다.
-        </div>
-      ) : null}
+        )}
+      />
     </Card>
   );
 }

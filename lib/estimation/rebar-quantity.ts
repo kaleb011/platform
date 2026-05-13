@@ -87,6 +87,16 @@ const positionLabel: Record<RebarPosition, string> = {
   tie: "띠철근",
   x: "X방향",
   y: "Y방향",
+  x_bottom: "X방향 하부근",
+  y_bottom: "Y방향 하부근",
+  x_top: "X방향 상부근",
+  y_top: "Y방향 상부근",
+  distribution: "배력근",
+  opening_reinforcement: "개구부 보강근",
+  vertical: "수직근",
+  horizontal: "수평근",
+  u_bar: "U-BAR",
+  c_bar: "C-BAR",
   unknown: "위치 미확정"
 };
 
@@ -851,6 +861,25 @@ function buildQuantityResult(args: {
   };
 }
 
+function getDirectionType(position: RebarPosition): "x" | "y" | null {
+  if (position === "x" || position === "x_bottom" || position === "x_top") {
+    return "x";
+  }
+
+  if (position === "y" || position === "y_bottom" || position === "y_top") {
+    return "y";
+  }
+
+  return null;
+}
+
+function isDirectShapePosition(position: RebarPosition) {
+  return position === "distribution" ||
+    position === "opening_reinforcement" ||
+    position === "u_bar" ||
+    position === "c_bar";
+}
+
 export function recalculateRebarQuantityCandidate(
   candidate: RebarQuantityCandidateRecord
 ): RebarQuantityCandidateRecord {
@@ -975,8 +1004,9 @@ export function recalculateRebarQuantityCandidate(
         barCount,
         singleBarLengthM,
         formula:
-          `보 늑근: ${countPreview}개 x ${roundQuantity(singleBarLengthM, 3)}m x ` +
-          `${memberCount}회 x ${faceCount}면 x ${unitWeight}kg/m`,
+          `보 늑근: ${countPreview}본 x ` +
+          `[2x(${candidate.sectionWidthMm}-2x${cover})+2x(${candidate.sectionDepthMm}-2x${cover})+갈고리 ${hook}+절곡 ${bend}]/1000m ` +
+          `x ${candidate.diameter} ${unitWeight}kg/m x ${memberCount}EA x ${faceCount}면`,
         basis:
           "보 늑근: 개수는 보 길이 / 간격 기준, 1개 길이는 2x(보 폭 - 2x피복) + 2x(보 춤 - 2x피복) + 갈고리 + 절곡 보정입니다."
       });
@@ -1017,7 +1047,8 @@ export function recalculateRebarQuantityCandidate(
         0,
         2 * (candidate.sectionWidthMm - 2 * cover) +
           2 * (candidate.sectionDepthMm - 2 * cover) +
-          hook
+          hook +
+          bend
       ) / 1000;
       const countPreview = getCountRulePreview(
         `${candidate.memberHeightMm} / ${candidate.spacingMm}`,
@@ -1030,10 +1061,11 @@ export function recalculateRebarQuantityCandidate(
         barCount,
         singleBarLengthM,
         formula:
-          `기둥 띠철근: ${countPreview}개 x ${roundQuantity(singleBarLengthM, 3)}m x ` +
-          `${memberCount}회 x ${faceCount}면 x ${unitWeight}kg/m`,
+          `기둥 띠철근: ${countPreview}본 x ` +
+          `[2x(${candidate.sectionWidthMm}-2x${cover})+2x(${candidate.sectionDepthMm}-2x${cover})+갈고리 ${hook}+절곡 ${bend}]/1000m ` +
+          `x ${candidate.diameter} ${unitWeight}kg/m x ${memberCount}EA x ${faceCount}면`,
         basis:
-          "기둥 띠철근: 개수는 기둥 높이 / 간격 기준, 1개 길이는 2x(기둥 폭 - 2x피복) + 2x(기둥 춤 - 2x피복) + 갈고리 길이입니다."
+          "기둥 띠철근: 개수는 기둥 높이 / 간격 기준, 1개 길이는 2x(기둥 폭 - 2x피복) + 2x(기둥 춤 - 2x피복) + 갈고리 + 절곡 보정입니다."
       });
     }
 
@@ -1051,8 +1083,137 @@ export function recalculateRebarQuantityCandidate(
     });
   }
 
-  if (candidate.memberType === "slab" || candidate.memberType === "wall") {
-    return fail(`${memberTypeLabel[candidate.memberType]} 실무식 템플릿은 후속 단계에서 반영 예정입니다.`);
+  if (candidate.memberType === "slab") {
+    const slabLength = candidate.slabLengthMm ?? candidate.memberLengthMm;
+    const slabWidth = candidate.slabWidthMm ?? candidate.sectionWidthMm;
+    const directLengthM = nonNegativeOrDefault(candidate.directBarLengthMm, 0) / 1000;
+
+    if (isDirectShapePosition(candidate.position) && directLengthM > 0) {
+      const barCount = positiveOrDefault(manualBarCount || candidate.barCount, 0);
+
+      return buildQuantityResult({
+        base,
+        barCount,
+        singleBarLengthM: directLengthM,
+        formula:
+          `${positionLabel[candidate.position]}: 직접입력 ${barCount}본 x ${roundQuantity(directLengthM, 3)}m ` +
+          `x ${candidate.diameter} ${unitWeight}kg/m x ${memberCount}EA x ${faceCount}면`,
+        basis:
+          "슬래브 배력근/개구부 보강근 1차 템플릿: 직접 본수와 직접 산출길이로 정미중량을 산출합니다."
+      });
+    }
+
+    if (!slabLength || !slabWidth || !candidate.spacingMm) {
+      return fail("슬래브 산출에는 슬래브 길이, 폭, 간격이 필요합니다.");
+    }
+
+    const direction = getDirectionType(candidate.position) ?? "x";
+    const countDimension = direction === "x" ? slabWidth : slabLength;
+    const lengthDimension = direction === "x" ? slabLength : slabWidth;
+    const effectiveCountDimension = Math.max(0, countDimension - 2 * cover);
+    const barCount = resolveCountByRule(
+      effectiveCountDimension / candidate.spacingMm,
+      barCountRule,
+      manualBarCount
+    );
+    const singleBarLengthM = Math.max(
+      0,
+      lengthDimension - 2 * cover + anchorage + splice + hook + bend
+    ) / 1000;
+    const countPreview = getCountRulePreview(
+      `(${countDimension} - 2x${cover}) / ${candidate.spacingMm}`,
+      barCountRule,
+      manualBarCount
+    );
+    const label =
+      candidate.position === "y_bottom" || candidate.position === "y_top"
+        ? positionLabel[candidate.position]
+        : candidate.position === "x_top" ||
+            candidate.position === "x_bottom" ||
+            candidate.position === "distribution"
+          ? positionLabel[candidate.position]
+          : direction === "x"
+            ? "X방향 철근"
+            : "Y방향 철근";
+
+    return buildQuantityResult({
+      base: {
+        ...base,
+        slabLengthMm: slabLength,
+        slabWidthMm: slabWidth,
+        position: candidate.position === "unknown" ? "x_bottom" : candidate.position
+      },
+      barCount,
+      singleBarLengthM,
+      formula:
+        `슬래브 ${label}: ${countPreview}본 x ` +
+        `(${lengthDimension}-2x${cover}+정착 ${anchorage}+이음 ${splice}+갈고리 ${hook}+절곡 ${bend})/1000m ` +
+        `x ${candidate.diameter} ${unitWeight}kg/m x ${memberCount}EA x ${faceCount}면`,
+      basis:
+        "슬래브: X방향은 본수 산정에 슬래브 폭, 1본 길이에 슬래브 길이를 쓰고, Y방향은 길이와 폭을 반대로 적용합니다."
+    });
+  }
+
+  if (candidate.memberType === "wall") {
+    const wallLength = candidate.wallLengthMm ?? candidate.memberLengthMm;
+    const wallHeight = candidate.wallHeightMm ?? candidate.memberHeightMm;
+    const directLengthM = nonNegativeOrDefault(candidate.directBarLengthMm, 0) / 1000;
+
+    if (isDirectShapePosition(candidate.position) && directLengthM > 0) {
+      const barCount = positiveOrDefault(manualBarCount || candidate.barCount, 0);
+
+      return buildQuantityResult({
+        base,
+        barCount,
+        singleBarLengthM: directLengthM,
+        formula:
+          `벽체 ${positionLabel[candidate.position]}: 직접입력 ${barCount}본 x ${roundQuantity(directLengthM, 3)}m ` +
+          `x ${candidate.diameter} ${unitWeight}kg/m x ${memberCount}EA x ${faceCount}면`,
+        basis:
+          "벽체 U-BAR/C-BAR/개구부 보강근 1차 템플릿: 직접 본수와 직접 산출길이로 정미중량을 산출합니다."
+      });
+    }
+
+    if (!wallLength || !wallHeight || !candidate.spacingMm) {
+      return fail("벽체 산출에는 벽 길이, 벽 높이, 간격이 필요합니다.");
+    }
+
+    const isHorizontal = candidate.position === "horizontal";
+    const countDimension = isHorizontal ? wallHeight : wallLength;
+    const lengthDimension = isHorizontal ? wallLength : wallHeight;
+    const effectiveCountDimension = Math.max(0, countDimension - 2 * cover);
+    const barCount = resolveCountByRule(
+      effectiveCountDimension / candidate.spacingMm,
+      barCountRule,
+      manualBarCount
+    );
+    const singleBarLengthM = Math.max(
+      0,
+      lengthDimension - 2 * cover + anchorage + splice + hook + bend
+    ) / 1000;
+    const countPreview = getCountRulePreview(
+      `(${countDimension} - 2x${cover}) / ${candidate.spacingMm}`,
+      barCountRule,
+      manualBarCount
+    );
+    const position = candidate.position === "horizontal" ? "horizontal" : "vertical";
+
+    return buildQuantityResult({
+      base: {
+        ...base,
+        wallLengthMm: wallLength,
+        wallHeightMm: wallHeight,
+        position
+      },
+      barCount,
+      singleBarLengthM,
+      formula:
+        `벽체 ${positionLabel[position]}: ${countPreview}본 x ` +
+        `(${lengthDimension}-2x${cover}+정착 ${anchorage}+이음 ${splice}+갈고리 ${hook}+절곡 ${bend})/1000m ` +
+        `x ${candidate.diameter} ${unitWeight}kg/m x ${memberCount}EA x ${faceCount}면`,
+      basis:
+        "벽체: 수직근은 본수 산정에 벽 길이, 1본 길이에 벽 높이를 쓰고, 수평근은 높이와 길이를 반대로 적용합니다. 면수는 양면 배근 검토값으로 반영합니다."
+    });
   }
 
   return fail("부재 종류 확인 필요");

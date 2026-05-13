@@ -623,27 +623,58 @@ export function EstimationDashboard() {
             ? "main"
             : memberType === "beam"
               ? "main"
-              : "unknown",
+              : memberType === "slab"
+                ? "x_bottom"
+                : "vertical",
       workCategory: "철근콘크리트공사",
       itemName: "철근 가공 및 조립",
       specification: `${diameter} / 직접 추가`,
       diameter,
       unitWeightKgPerM,
       barCount: memberType === "column" ? 8 : memberType === "beam" ? 4 : undefined,
-      spacingMm: memberType === "footing" ? 200 : undefined,
-      memberLengthMm: memberType === "beam" ? 6000 : undefined,
-      memberHeightMm: memberType === "column" ? 3000 : undefined,
-      sectionWidthMm: memberType === "beam" ? 300 : memberType === "column" ? 500 : undefined,
-      sectionDepthMm: memberType === "beam" ? 600 : memberType === "column" ? 500 : undefined,
+      spacingMm: ["footing", "slab", "wall"].includes(memberType) ? 200 : undefined,
+      memberLengthMm:
+        memberType === "beam"
+          ? 6000
+          : memberType === "slab"
+            ? 6300
+            : memberType === "wall"
+              ? 3900
+              : undefined,
+      memberHeightMm: memberType === "column" ? 3000 : memberType === "wall" ? 4100 : undefined,
+      sectionWidthMm:
+        memberType === "beam"
+          ? 300
+          : memberType === "column"
+            ? 500
+            : memberType === "slab"
+              ? 3900
+              : undefined,
+      sectionDepthMm:
+        memberType === "beam"
+          ? 600
+          : memberType === "column"
+            ? 500
+            : memberType === "slab"
+              ? 300
+              : memberType === "wall"
+                ? 400
+                : undefined,
       footingWidthMm: memberType === "footing" ? 3000 : undefined,
       footingLengthMm: memberType === "footing" ? 3000 : undefined,
-      coverMm: 40,
+      slabLengthMm: memberType === "slab" ? 6300 : undefined,
+      slabWidthMm: memberType === "slab" ? 3900 : undefined,
+      slabThicknessMm: memberType === "slab" ? 300 : undefined,
+      wallLengthMm: memberType === "wall" ? 3900 : undefined,
+      wallHeightMm: memberType === "wall" ? 4100 : undefined,
+      wallThicknessMm: memberType === "wall" ? 400 : undefined,
+      coverMm: memberType === "slab" ? 30 : 40,
       anchorageLengthMm: 0,
       spliceLengthMm: 0,
       hookLengthMm: 0,
       bendCorrectionMm: 0,
       lossRate: 0.03,
-      faceCount: 1,
+      faceCount: memberType === "wall" ? 2 : 1,
       barCountRule: "floor_plus_one",
       manualBarCount: memberType === "column" ? 8 : memberType === "beam" ? 4 : undefined,
       footingLayer: "top",

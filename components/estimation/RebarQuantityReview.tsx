@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { CollapsibleResultList } from "@/components/estimation/CollapsibleResultList";
 import {
   getRebarMemberTypeLabel,
   getRebarPositionLabel,
@@ -46,8 +47,8 @@ const memberTabs: Array<{ value: TemplateMemberType; label: string; enabled: boo
   { value: "footing", label: "기초", enabled: true },
   { value: "beam", label: "보", enabled: true },
   { value: "column", label: "기둥", enabled: true },
-  { value: "slab", label: "슬래브", enabled: false },
-  { value: "wall", label: "벽체", enabled: false }
+  { value: "slab", label: "슬래브", enabled: true },
+  { value: "wall", label: "벽체", enabled: true }
 ];
 
 const diameterOptions = ["D10", "D13", "D16", "D19", "D22", "D25", "D29", "D32"];
@@ -196,8 +197,10 @@ function CandidateList({
   }
 
   return (
-    <div className="grid gap-2">
-      {candidates.map((candidate) => {
+    <CollapsibleResultList
+      emptyMessage={`${getRebarMemberTypeLabel(activeType)} 후보가 없습니다. 직접 부재 추가로 산출 템플릿을 만들 수 있습니다.`}
+      items={candidates}
+      renderItem={(candidate) => {
         const selected = selectedId === candidate.id;
 
         return (
@@ -234,8 +237,8 @@ function CandidateList({
             </div>
           </button>
         );
-      })}
-    </div>
+      }}
+    />
   );
 }
 
@@ -264,18 +267,25 @@ function TemplateInputs({
               { value: "main", label: "주근" },
               { value: "tie", label: "띠철근" }
             ]
-          : [{ value: "unknown", label: "후속 템플릿" }];
-
-  const disabledTemplate = activeType === "slab" || activeType === "wall";
+          : activeType === "slab"
+            ? [
+                { value: "x_bottom", label: "X방향 하부근" },
+                { value: "y_bottom", label: "Y방향 하부근" },
+                { value: "x_top", label: "X방향 상부근" },
+                { value: "y_top", label: "Y방향 상부근" },
+                { value: "distribution", label: "배력근" },
+                { value: "opening_reinforcement", label: "개구부 보강근" }
+              ]
+            : [
+                { value: "vertical", label: "수직근" },
+                { value: "horizontal", label: "수평근" },
+                { value: "u_bar", label: "U-BAR" },
+                { value: "c_bar", label: "C-BAR" },
+                { value: "opening_reinforcement", label: "개구부 보강근" }
+              ];
 
   return (
     <div className="grid gap-4">
-      {disabledTemplate ? (
-        <div className="rounded-[14px] border border-dashed border-border bg-[#fff8ea] px-4 py-3 text-[12px] leading-5 text-[#7a4a05]">
-          {getRebarMemberTypeLabel(activeType)} 산출식은 1차 구현 범위 밖입니다. 후보 분류와 보류/제외 관리는 가능하며, 승인 산출은 후속 템플릿 반영 후 사용합니다.
-        </div>
-      ) : null}
-
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Field label="부재명">
           <input
@@ -390,6 +400,66 @@ function TemplateInputs({
             label="띠철근 간격 mm"
             onChange={(value) => onChange({ spacingMm: value })}
             value={candidate.spacingMm}
+          />
+        </div>
+      ) : null}
+
+      {activeType === "slab" ? (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <NumberInput
+            label="슬래브 길이 mm"
+            onChange={(value) => onChange({ slabLengthMm: value, memberLengthMm: value })}
+            value={candidate.slabLengthMm ?? candidate.memberLengthMm}
+          />
+          <NumberInput
+            label="슬래브 폭 mm"
+            onChange={(value) => onChange({ slabWidthMm: value, sectionWidthMm: value })}
+            value={candidate.slabWidthMm ?? candidate.sectionWidthMm}
+          />
+          <NumberInput
+            label="슬래브 두께 mm"
+            onChange={(value) => onChange({ slabThicknessMm: value, sectionDepthMm: value })}
+            value={candidate.slabThicknessMm ?? candidate.sectionDepthMm}
+          />
+          <NumberInput
+            label="간격 mm"
+            onChange={(value) => onChange({ spacingMm: value })}
+            value={candidate.spacingMm}
+          />
+          <NumberInput
+            label="직접 산출길이 mm"
+            onChange={(value) => onChange({ directBarLengthMm: value })}
+            value={candidate.directBarLengthMm}
+          />
+        </div>
+      ) : null}
+
+      {activeType === "wall" ? (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <NumberInput
+            label="벽 길이 mm"
+            onChange={(value) => onChange({ wallLengthMm: value, memberLengthMm: value })}
+            value={candidate.wallLengthMm ?? candidate.memberLengthMm}
+          />
+          <NumberInput
+            label="벽 높이 mm"
+            onChange={(value) => onChange({ wallHeightMm: value, memberHeightMm: value })}
+            value={candidate.wallHeightMm ?? candidate.memberHeightMm}
+          />
+          <NumberInput
+            label="벽 두께 mm"
+            onChange={(value) => onChange({ wallThicknessMm: value, sectionDepthMm: value })}
+            value={candidate.wallThicknessMm ?? candidate.sectionDepthMm}
+          />
+          <NumberInput
+            label="간격 mm"
+            onChange={(value) => onChange({ spacingMm: value })}
+            value={candidate.spacingMm}
+          />
+          <NumberInput
+            label="직접 산출길이 mm"
+            onChange={(value) => onChange({ directBarLengthMm: value })}
+            value={candidate.directBarLengthMm}
           />
         </div>
       ) : null}
