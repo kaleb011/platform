@@ -51,6 +51,7 @@ import {
   buildRebarQuantityCandidates,
   createEstimateItemsFromAcceptedRebarCandidates,
   extractRebarSpecsFromPdfResults,
+  getRebarUnitWeight,
   recalculateRebarQuantityCandidate
 } from "@/lib/estimation/rebar-quantity";
 import {
@@ -80,6 +81,7 @@ import type {
   ManualEstimateStatementItemRecord,
   ManualEstimateStatementSummary,
   PdfTextExtractionResult,
+  RebarMemberType,
   ProjectEstimateState,
   RebarQuantityCandidateRecord,
   RebarReviewStatus,
@@ -606,6 +608,72 @@ export function EstimationDashboard() {
     setNotice("철근 수량 산출 후보 값을 보정했습니다. 수정된 값으로 수량을 다시 계산했습니다.");
   };
 
+  const handleAddRebarCandidate = (memberType: Exclude<RebarMemberType, "unknown">) => {
+    const id = `manual-rebar-${memberType}-${Date.now().toString(36)}`;
+    const diameter = "D16";
+    const unitWeightKgPerM = getRebarUnitWeight(diameter) ?? 1.56;
+    const baseCandidate: RebarQuantityCandidateRecord = {
+      id,
+      memberName: `직접추가-${memberType}`,
+      memberType,
+      position:
+        memberType === "footing"
+          ? "x"
+          : memberType === "column"
+            ? "main"
+            : memberType === "beam"
+              ? "main"
+              : "unknown",
+      workCategory: "철근콘크리트공사",
+      itemName: "철근 가공 및 조립",
+      specification: `${diameter} / 직접 추가`,
+      diameter,
+      unitWeightKgPerM,
+      barCount: memberType === "column" ? 8 : memberType === "beam" ? 4 : undefined,
+      spacingMm: memberType === "footing" ? 200 : undefined,
+      memberLengthMm: memberType === "beam" ? 6000 : undefined,
+      memberHeightMm: memberType === "column" ? 3000 : undefined,
+      sectionWidthMm: memberType === "beam" ? 300 : memberType === "column" ? 500 : undefined,
+      sectionDepthMm: memberType === "beam" ? 600 : memberType === "column" ? 500 : undefined,
+      footingWidthMm: memberType === "footing" ? 3000 : undefined,
+      footingLengthMm: memberType === "footing" ? 3000 : undefined,
+      coverMm: 40,
+      anchorageLengthMm: 0,
+      spliceLengthMm: 0,
+      hookLengthMm: 0,
+      bendCorrectionMm: 0,
+      lossRate: 0.03,
+      faceCount: 1,
+      barCountRule: "floor_plus_one",
+      manualBarCount: memberType === "column" ? 8 : memberType === "beam" ? 4 : undefined,
+      footingLayer: "top",
+      memberCount: 1,
+      quantityKg: 0,
+      quantityTon: 0,
+      materialQuantityKg: 0,
+      materialQuantityTon: 0,
+      unit: "kg",
+      calculationFormula: "실무식 산출값 입력 대기",
+      calculationBasis: "직접 추가한 철근 부재입니다.",
+      confidence: 1,
+      reviewStatus: "pending",
+      quantityReviewRequired: true,
+      note: "직접 추가"
+    };
+
+    const nextCandidate = recalculateRebarQuantityCandidate(baseCandidate);
+
+    setRebarCandidates((current) => [nextCandidate, ...current]);
+    setNotice("직접 철근 부재를 추가했습니다. 부재 치수와 보정값을 확인한 뒤 승인하세요.");
+
+    return id;
+  };
+
+  const handleRemoveRebarCandidate = (candidateId: string) => {
+    setRebarCandidates((current) => current.filter((candidate) => candidate.id !== candidateId));
+    setNotice("선택한 철근 후보를 제거했습니다. 제거된 후보는 승인 물량과 품셈 산출에 반영되지 않습니다.");
+  };
+
   const handleRebarCandidateStatusChange = (
     candidateId: string,
     reviewStatus: RebarReviewStatus
@@ -946,9 +1014,11 @@ export function EstimationDashboard() {
                   <RebarQuantityReview
                     candidates={activeRebarCandidates}
                     drawingSheets={drawingSheetIndexes}
+                    onAddCandidate={handleAddRebarCandidate}
                     onChangeCandidate={handleRebarCandidateChange}
                     onChangeStatus={handleRebarCandidateStatusChange}
                     onExportExcel={() => exportRebarQuantityCandidatesToExcel(activeRebarCandidates)}
+                    onRemoveCandidate={handleRemoveRebarCandidate}
                   />
                   <RebarStandardEstimatePanel approvedRebarItems={approvedRebarEstimateItems} />
                   <DrawingExtractionTable

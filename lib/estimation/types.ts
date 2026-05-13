@@ -50,7 +50,7 @@ export type StatementReviewStatus =
   | "unit_check_required"
   | "match_review_required";
 
-export type RebarMemberType = "beam" | "column" | "footing" | "slab" | "unknown";
+export type RebarMemberType = "beam" | "column" | "footing" | "slab" | "wall" | "unknown";
 
 export type RebarPosition =
   | "top"
@@ -63,6 +63,10 @@ export type RebarPosition =
   | "unknown";
 
 export type RebarReviewStatus = "pending" | "accepted" | "rejected";
+
+export type RebarBarCountRule = "floor_plus_one" | "ceil_plus_one" | "direct";
+
+export type RebarFootingLayer = "top" | "bottom";
 
 export type RebarSourceType =
   | "structural_schedule"
@@ -338,9 +342,21 @@ export interface RebarQuantityCandidateRecord {
   sectionDepthMm?: number;
   footingWidthMm?: number;
   footingLengthMm?: number;
+  coverMm?: number;
+  anchorageLengthMm?: number;
+  spliceLengthMm?: number;
+  hookLengthMm?: number;
+  bendCorrectionMm?: number;
+  lossRate?: number;
+  faceCount?: number;
+  barCountRule?: RebarBarCountRule;
+  manualBarCount?: number;
+  footingLayer?: RebarFootingLayer;
   memberCount: number;
   quantityKg: number;
   quantityTon: number;
+  materialQuantityKg?: number;
+  materialQuantityTon?: number;
   unit: "kg" | "ton";
   calculationFormula: string;
   calculationBasis: string;
