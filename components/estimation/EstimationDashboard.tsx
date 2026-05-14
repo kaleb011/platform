@@ -32,7 +32,6 @@ import { UploadedDrawingFilesTable } from "@/components/estimation/UploadedDrawi
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import {
   attachDrawingReferencesToSheets,
   buildDrawingReferences,
@@ -59,7 +58,6 @@ import {
   createSampleProjectEstimateStates
 } from "@/lib/estimation/sample-data";
 import {
-  buildScheduleCategorySummaries,
   buildEstimateStatementItems,
   createCandidatesFromPdfText,
   createDrawingFileRecordFromFile,
@@ -72,12 +70,12 @@ import {
   isManualStandardMatchTarget,
   summarizeEstimateStatementItems
 } from "@/lib/estimation/service";
+import { buildScheduleForecastFromEstimateItems } from "@/lib/estimation/schedule-forecast";
 import { parseArchitectureUnitPriceWorkbook } from "@/lib/estimation/unit-price-parser";
 import type {
   DrawingFileRecord,
   EstimateItemRecord,
   EstimateItemMatchRecord,
-  EstimationTabKey,
   ManualEstimateStatementItemRecord,
   ManualEstimateStatementSummary,
   PdfTextExtractionResult,
@@ -88,11 +86,6 @@ import type {
   ReviewStatus,
   UnitPriceRecord
 } from "@/lib/estimation/types";
-
-const tabOptions = [
-  { value: "drawing-estimate", label: "도면 기반 적산내역 생성" },
-  { value: "schedule-forecast", label: "적산내역 기반 예상공정 대시보드" }
-] as const;
 
 const summaryIcons = {
   uploaded: Layers3,
@@ -184,7 +177,6 @@ function summarizeManualEstimateStatementItems(
 
 export function EstimationDashboard() {
   const seed = useMemo(() => createEstimationSampleData(), []);
-  const [activeTab, setActiveTab] = useState<EstimationTabKey>("drawing-estimate");
   const [projectStates, setProjectStates] = useState<ProjectEstimateState[]>(() =>
     createSampleProjectEstimateStates(seed)
   );
@@ -199,7 +191,6 @@ export function EstimationDashboard() {
     useState<UnitPriceParseStatus>("idle");
   const [unitPriceErrorMessage, setUnitPriceErrorMessage] = useState<string | null>(null);
   const [manualUnitPriceInputs, setManualUnitPriceInputs] = useState<Record<string, string>>({});
-  const [importedSheetName, setImportedSheetName] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(
     "샘플 도면/적산 데이터가 있는 프로젝트와 도면 데이터가 없는 프로젝트 흐름을 함께 확인할 수 있습니다."
   );
@@ -334,9 +325,9 @@ export function EstimationDashboard() {
   const reflectedUploadedPdfEstimateCount = estimateItems.filter(
     (item) => item.matchSource === "uploaded_pdf"
   ).length;
-  const scheduleSummaries = buildScheduleCategorySummaries(seed.scheduleForecastItems);
-  const reviewNeededScheduleItems = seed.scheduleForecastItems.filter(
-    (item) => item.status !== "linked"
+  const scheduleForecast = useMemo(
+    () => buildScheduleForecastFromEstimateItems(manualEstimateStatementItems),
+    [manualEstimateStatementItems]
   );
 
   const extractedSuccessPageCount = activePdfTextResults.reduce(
@@ -867,18 +858,6 @@ export function EstimationDashboard() {
     setNotice(messages.join(" "));
   };
 
-  const handleImportSpreadsheet = (files: FileList | null) => {
-    if (!files || files.length === 0) {
-      return;
-    }
-
-    const file = files[0];
-    setImportedSheetName(file.name);
-    setNotice(
-      `${file.name} 파일이 선택되었습니다. 현재 화면에서는 파일명을 표시하고 예시 공정 데이터와 함께 흐름을 확인합니다.`
-    );
-  };
-
   const handleUnitPriceUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) {
       return;
@@ -975,8 +954,7 @@ export function EstimationDashboard() {
               적산내역 보조
             </h2>
             <p className="mt-2 text-[14px] leading-6 text-slate">
-              도면 PDF에서 수량 후보를 추출하고, 검토된 항목에 표준품셈과 사용자가 입력한
-              공사단가를 적용해 적산내역서 초안을 생성합니다.
+              도면 기반 수량산출과 견적서 기반 예상공정 초안을 확인합니다.
             </p>
           </div>
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-primary/10 text-primary">
@@ -1009,37 +987,23 @@ export function EstimationDashboard() {
         })}
       </section>
 
-      <Card className="mb-6 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <SectionHeading
-            title="업무 영역"
-            description="도면 기반 적산과 예상공정 대시보드를 전환해 확인합니다."
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+        <aside className="space-y-5 lg:col-span-4">
+          <DrawingUploadPanel
+            drawingDataExists={drawingDataExists}
+            notice={notice}
+            onSelectFiles={handleDrawingUpload}
           />
-          <div className="min-w-0 lg:min-w-[420px]">
-            <SegmentedTabs options={tabOptions} value={activeTab} onChange={setActiveTab} />
-          </div>
-        </div>
-      </Card>
+          <UploadedDrawingFilesTable drawingFiles={drawingFiles} />
+          <PdfTextExtractionSummary results={activePdfTextResults} />
+          <DrawingIntelligencePanel
+            references={drawingReferences}
+            roadmaps={quantityRoadmaps}
+            sheets={drawingSheetIndexes}
+          />
+        </aside>
 
-      {activeTab === "drawing-estimate" ? (
-        <>
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-            <aside className="space-y-5 lg:col-span-4">
-              <DrawingUploadPanel
-                drawingDataExists={drawingDataExists}
-                notice={notice}
-                onSelectFiles={handleDrawingUpload}
-              />
-              <UploadedDrawingFilesTable drawingFiles={drawingFiles} />
-              <PdfTextExtractionSummary results={activePdfTextResults} />
-              <DrawingIntelligencePanel
-                references={drawingReferences}
-                roadmaps={quantityRoadmaps}
-                sheets={drawingSheetIndexes}
-              />
-            </aside>
-
-            <main className="space-y-5 lg:col-span-8">
+        <main className="space-y-5 lg:col-span-8">
               {drawingDataExists ? (
                 <>
                   <RebarQuantityReview
@@ -1115,6 +1079,10 @@ export function EstimationDashboard() {
                     summary={manualEstimateStatementSummary}
                     unitPriceInputs={manualUnitPriceInputs}
                   />
+                  <ScheduleForecastDashboard
+                    items={scheduleForecast.items}
+                    summary={scheduleForecast.summary}
+                  />
                   <details className="rounded-[20px] border border-border bg-white px-4 py-4 shadow-sm">
                     <summary className="cursor-pointer text-[14px] font-bold text-foreground">
                       참고용 일위대가 자료
@@ -1155,27 +1123,24 @@ export function EstimationDashboard() {
                   </div>
                 </Card>
               )}
-            </main>
-          </div>
+              {!drawingDataExists ? (
+                <ScheduleForecastDashboard
+                  items={scheduleForecast.items}
+                  summary={scheduleForecast.summary}
+                />
+              ) : null}
+        </main>
+      </div>
 
-          <section className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <EstimationDataStrategyCard />
-            <IfcExpansionNotice />
-          </section>
-        </>
-      ) : (
-        <div className="space-y-5">
-          <ScheduleForecastDashboard
-            categorySummaries={scheduleSummaries}
-            estimateItems={estimateItems}
-            importedSheetName={importedSheetName}
-            onImportSpreadsheet={handleImportSpreadsheet}
-            reviewNeededItems={reviewNeededScheduleItems}
-            scheduleItems={seed.scheduleForecastItems}
-          />
+      <details className="mt-5 rounded-[20px] border border-border bg-white px-4 py-4 shadow-sm">
+        <summary className="cursor-pointer text-[14px] font-bold text-foreground">
+          참고용 기능
+        </summary>
+        <section className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <EstimationDataStrategyCard />
           <IfcExpansionNotice />
-        </div>
-      )}
+        </section>
+      </details>
     </div>
   );
 }

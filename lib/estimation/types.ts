@@ -578,6 +578,37 @@ export interface ManualEstimateStatementSummary {
   totalAmount: number;
 }
 
+export type ScheduleForecastPriority = "high" | "medium" | "low";
+
+export type ScheduleForecastItemStatus =
+  | "ready"
+  | "review_required"
+  | "quantity_required"
+  | "price_required";
+
+export interface ScheduleForecastItem {
+  id: string;
+  workCategory: string;
+  processName: string;
+  sourceEstimateItems: string[];
+  quantity?: number;
+  unit?: string;
+  amount?: number;
+  estimatedDurationDays: number | null;
+  priority: ScheduleForecastPriority;
+  status: ScheduleForecastItemStatus;
+  basis: string;
+  note?: string;
+}
+
+export interface ScheduleForecastSummary {
+  totalProcesses: number;
+  readyProcesses: number;
+  reviewRequiredProcesses: number;
+  totalEstimatedDays: number;
+  totalAmount: number;
+}
+
 export interface ScheduleForecastItemRecord {
   id: string;
   projectId?: string | null;
