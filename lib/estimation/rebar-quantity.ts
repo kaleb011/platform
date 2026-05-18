@@ -330,6 +330,67 @@ function getRebarSourcePriority(sourceType: RebarSourceType): number {
   return 0;
 }
 
+export type RebarCandidateSourceGroup = "schedule" | "plan" | "note";
+
+export function getRebarCandidateSourceGroup(
+  candidate: Pick<
+    RebarQuantityCandidateRecord,
+    "drawingNo" | "memberName" | "rebarSourceType" | "sourceTextSnippet"
+  >
+): RebarCandidateSourceGroup {
+  const sourceText = [
+    candidate.drawingNo,
+    candidate.memberName,
+    candidate.sourceTextSnippet
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (
+    candidate.rebarSourceType === "structural_schedule" ||
+    /\bS-30[1-3]\b/i.test(sourceText) ||
+    includesKeyword(sourceText, structuralScheduleKeywords)
+  ) {
+    return "schedule";
+  }
+
+  if (
+    candidate.rebarSourceType === "structural_plan" ||
+    /\bS-22[1-5]\b/i.test(sourceText) ||
+    includesKeyword(sourceText, structuralPlanKeywords)
+  ) {
+    return "plan";
+  }
+
+  return "note";
+}
+
+export function sortRebarQuantityCandidatesBySource(
+  candidates: RebarQuantityCandidateRecord[]
+): RebarQuantityCandidateRecord[] {
+  const groupRank: Record<RebarCandidateSourceGroup, number> = {
+    schedule: 0,
+    plan: 1,
+    note: 2
+  };
+
+  return [...candidates].sort((left, right) => {
+    const leftGroup = getRebarCandidateSourceGroup(left);
+    const rightGroup = getRebarCandidateSourceGroup(right);
+    const groupDiff = groupRank[leftGroup] - groupRank[rightGroup];
+
+    if (groupDiff !== 0) {
+      return groupDiff;
+    }
+
+    return (
+      (left.sourcePage ?? 9999) - (right.sourcePage ?? 9999) ||
+      (left.memberName ?? "").localeCompare(right.memberName ?? "", "ko-KR") ||
+      left.diameter.localeCompare(right.diameter, "ko-KR")
+    );
+  });
+}
+
 function hasScheduleReference(text: string): boolean {
   return includesKeyword(text, structuralScheduleKeywords) || /\bS-30[1-3]\b/i.test(text);
 }
@@ -452,7 +513,7 @@ export function extractRebarSpecsFromText(
   const rebarSourceType = options?.rebarSourceType ?? inferRebarSourceType(text);
   const sourcePriority = getRebarSourcePriority(rebarSourceType);
 
-  if (sourcePriority <= 0 || (options?.hasStructuralSchedulePages && sourcePriority <= 1)) {
+  if (sourcePriority <= 0) {
     return [];
   }
 
@@ -564,7 +625,7 @@ export function extractRebarSpecsFromPdfPages(
   const hasStructuralSchedulePages = pageSources.some(({ priority }) => priority === 3);
 
   const specs = pageSources.reduce<RebarSpecRecord[]>((records, source) => {
-    if (source.priority <= 0 || (hasStructuralSchedulePages && source.priority <= 1)) {
+    if (source.priority <= 0) {
       return records;
     }
 
@@ -677,6 +738,12 @@ function recalculateRebarQuantityCandidateLegacy(
     quantityReviewRequired: true,
     note
   });
+
+  const missingRequiredInputs = getMissingRebarRequiredInputLabels(candidate);
+
+  if (missingRequiredInputs.length > 0) {
+    return fail(`필수 입력값 부족: ${missingRequiredInputs.join(", ")}`, "필수 입력값 부족");
+  }
 
   if (!candidate.diameter || unitWeight <= 0) {
     return fail("철근 규격 또는 단위중량 확인 필요");
@@ -880,6 +947,92 @@ function isDirectShapePosition(position: RebarPosition) {
     position === "c_bar";
 }
 
+function hasPositiveInput(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function hasWallReinforcementSnippet(candidate: RebarQuantityCandidateRecord) {
+  const snippet = candidate.sourceTextSnippet ?? candidate.rawText ?? "";
+  const hasSpacing = parseRebarSpacingPattern(snippet).length > 0;
+  const hasDirection = /수직|수평|VERT|HOR|HORIZONTAL|VERTICAL/i.test(snippet);
+
+  return hasSpacing && hasDirection;
+}
+
+export function isWallRebarDetailReviewRequired(candidate: RebarQuantityCandidateRecord) {
+  return candidate.memberType === "wall" && !hasWallReinforcementSnippet(candidate);
+}
+
+export function getMissingRebarRequiredInputLabels(
+  candidate: RebarQuantityCandidateRecord
+): string[] {
+  const missing: string[] = [];
+  const hasSpacingOrDirectCount =
+    hasPositiveInput(candidate.spacingMm) || hasPositiveInput(candidate.manualBarCount ?? candidate.barCount);
+
+  if (!hasPositiveInput(candidate.coverMm)) missing.push("피복");
+  if (!hasPositiveInput(candidate.memberCount)) missing.push("반복 개수");
+  if (candidate.memberType === "footing") {
+    if (candidate.position !== "x" && candidate.position !== "y") missing.push("방향 X/Y");
+    if (!hasPositiveInput(candidate.footingWidthMm)) missing.push("기초 폭");
+    if (!hasPositiveInput(candidate.footingLengthMm)) missing.push("기초 길이");
+    if (!hasSpacingOrDirectCount) missing.push("철근 간격 또는 직접 본수");
+  }
+
+  if (candidate.memberType === "beam") {
+    if (candidate.position !== "main" && candidate.position !== "stirrup") {
+      missing.push("철근 종류 주근/늑근");
+    }
+    if (!hasPositiveInput(candidate.memberLengthMm)) missing.push("보 길이");
+    if (!hasPositiveInput(candidate.sectionWidthMm)) missing.push("보 폭");
+    if (!hasPositiveInput(candidate.sectionDepthMm)) missing.push("보 춤");
+    if (!hasSpacingOrDirectCount) missing.push("철근 개수 또는 늑근 간격");
+  }
+
+  if (candidate.memberType === "column") {
+    if (candidate.position !== "main" && candidate.position !== "tie") {
+      missing.push("철근 종류 주근/띠철근");
+    }
+    if (!hasPositiveInput(candidate.memberHeightMm)) missing.push("기둥 높이");
+    if (!hasPositiveInput(candidate.sectionWidthMm)) missing.push("기둥 폭");
+    if (!hasPositiveInput(candidate.sectionDepthMm)) missing.push("기둥 춤");
+    if (!hasSpacingOrDirectCount) missing.push("철근 개수 또는 띠철근 간격");
+  }
+
+  if (candidate.memberType === "slab") {
+    if (!["x_bottom", "y_bottom", "x_top", "y_top", "x", "y"].includes(candidate.position)) {
+      missing.push("X/Y 방향 및 상부/하부");
+    }
+    if (!hasPositiveInput(candidate.slabLengthMm ?? candidate.memberLengthMm)) {
+      missing.push("슬래브 길이");
+    }
+    if (!hasPositiveInput(candidate.slabWidthMm ?? candidate.sectionWidthMm)) {
+      missing.push("슬래브 폭");
+    }
+    if (!hasPositiveInput(candidate.spacingMm)) missing.push("철근 간격");
+  }
+
+  if (candidate.memberType === "wall") {
+    if (candidate.position !== "vertical" && candidate.position !== "horizontal") {
+      missing.push("수직근/수평근");
+    }
+    if (!hasPositiveInput(candidate.wallLengthMm ?? candidate.memberLengthMm)) {
+      missing.push("벽 길이");
+    }
+    if (!hasPositiveInput(candidate.wallHeightMm ?? candidate.memberHeightMm)) {
+      missing.push("벽 높이");
+    }
+    if (!hasPositiveInput(candidate.spacingMm)) missing.push("철근 간격");
+    if (!hasPositiveInput(candidate.faceCount)) missing.push("면수");
+  }
+
+  if (candidate.memberType === "unknown") {
+    missing.push("부재 종류");
+  }
+
+  return missing;
+}
+
 export function recalculateRebarQuantityCandidate(
   candidate: RebarQuantityCandidateRecord
 ): RebarQuantityCandidateRecord {
@@ -928,14 +1081,51 @@ export function recalculateRebarQuantityCandidate(
     return fail("철근 규격 또는 단위중량 확인 필요");
   }
 
+  const missingRequiredInputsForTemplate = getMissingRebarRequiredInputLabels(candidate);
+
+  if (missingRequiredInputsForTemplate.length > 0) {
+    return fail(
+      `필수 입력값 부족: ${missingRequiredInputsForTemplate.join(", ")}`,
+      "필수 입력값 부족"
+    );
+  }
+
   if (candidate.memberType === "footing") {
-    if (!candidate.spacingMm || !candidate.footingWidthMm || !candidate.footingLengthMm) {
+    if (!candidate.footingWidthMm || !candidate.footingLengthMm) {
       return fail("기초 산출에는 폭, 길이, 간격이 필요합니다.");
     }
 
     const direction = candidate.position === "y" ? "y" : "x";
     const countDimension = direction === "x" ? candidate.footingWidthMm : candidate.footingLengthMm;
     const lengthDimension = direction === "x" ? candidate.footingLengthMm : candidate.footingWidthMm;
+
+    if (!candidate.spacingMm && manualBarCount > 0) {
+      const singleBarLengthM = Math.max(
+        0,
+        lengthDimension - 2 * cover + anchorage + splice + hook + bend
+      ) / 1000;
+      const layer = candidate.footingLayer === "bottom" ? "하부근" : "상부근";
+
+      return buildQuantityResult({
+        base: {
+          ...base,
+          position: direction,
+          footingLayer: candidate.footingLayer ?? "top"
+        },
+        barCount: manualBarCount,
+        singleBarLengthM,
+        formula:
+          `${layer} ${direction.toUpperCase()}방향: 직접입력 ${manualBarCount}본 x ` +
+          `${roundQuantity(singleBarLengthM, 3)}m x ${memberCount}EA x ${faceCount}면 x ${unitWeight}kg/m`,
+        basis:
+          "기초: 사용자가 직접 입력한 본수와 기초 치수로 정미중량을 산출합니다. 간격 또는 직접 본수의 출처를 도면에서 확인하세요."
+      });
+    }
+
+    if (!candidate.spacingMm) {
+      return fail("기초 산출에는 폭, 길이, 간격 또는 직접 본수가 필요합니다.");
+    }
+
     const effectiveCountDimension = Math.max(0, countDimension - 2 * cover);
     const barCount = resolveCountByRule(
       effectiveCountDimension / candidate.spacingMm,
@@ -1170,7 +1360,7 @@ export function recalculateRebarQuantityCandidate(
           `벽체 ${positionLabel[candidate.position]}: 직접입력 ${barCount}본 x ${roundQuantity(directLengthM, 3)}m ` +
           `x ${candidate.diameter} ${unitWeight}kg/m x ${memberCount}EA x ${faceCount}면`,
         basis:
-          "벽체 U-BAR/C-BAR/개구부 보강근 1차 템플릿: 직접 본수와 직접 산출길이로 정미중량을 산출합니다."
+          "벽체 U-BAR/C-BAR/개구부 보강근 1차 템플릿: 직접 본수와 직접 산출길이로 정미중량을 산출합니다. 사용자 보정값 기반입니다."
       });
     }
 
@@ -1212,7 +1402,7 @@ export function recalculateRebarQuantityCandidate(
         `(${lengthDimension}-2x${cover}+정착 ${anchorage}+이음 ${splice}+갈고리 ${hook}+절곡 ${bend})/1000m ` +
         `x ${candidate.diameter} ${unitWeight}kg/m x ${memberCount}EA x ${faceCount}면`,
       basis:
-        "벽체: 수직근은 본수 산정에 벽 길이, 1본 길이에 벽 높이를 쓰고, 수평근은 높이와 길이를 반대로 적용합니다. 면수는 양면 배근 검토값으로 반영합니다."
+        "벽체: 수직근은 본수 산정에 벽 길이, 1본 길이에 벽 높이를 쓰고, 수평근은 높이와 길이를 반대로 적용합니다. 면수는 양면 배근 검토값으로 반영합니다. 사용자 보정값 기반입니다."
     });
   }
 
@@ -1258,7 +1448,7 @@ export function buildRebarQuantityCandidates(
     return [...records, recalculateRebarQuantityCandidate(candidate)];
   }, []);
 
-  return dedupeRebarQuantityCandidates(candidates);
+  return sortRebarQuantityCandidatesBySource(dedupeRebarQuantityCandidates(candidates));
 }
 
 export function dedupeRebarQuantityCandidates(
@@ -1352,6 +1542,7 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
         unit: "kg",
         calculationBasis: recalculated.calculationFormula,
         sourceNote: [
+          `정미중량(품셈 가공/조립 기준): ${quantityKg}kg`,
           recalculated.calculationBasis,
           typeof recalculated.materialQuantityKg === "number"
             ? `자재중량(LOSS 포함): ${recalculated.materialQuantityKg}kg`

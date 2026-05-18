@@ -388,8 +388,10 @@ export function exportRebarQuantityCandidatesToExcel(
     "단위중량",
     "길이/높이/기초치수",
     "반복개수",
-    "수량 kg",
-    "수량 ton",
+    "정미중량 kg",
+    "정미중량 ton",
+    "자재중량 kg",
+    "자재중량 ton",
     "산출식",
     "산출근거",
     "출처파일",
@@ -426,6 +428,8 @@ export function exportRebarQuantityCandidatesToExcel(
           <td>${escapeHtml(candidate.memberCount)}</td>
           <td>${escapeHtml(candidate.quantityReviewRequired ? "검토 필요" : candidate.quantityKg)}</td>
           <td>${escapeHtml(candidate.quantityReviewRequired ? "검토 필요" : candidate.quantityTon)}</td>
+          <td>${escapeHtml(candidate.quantityReviewRequired ? "검토 필요" : candidate.materialQuantityKg ?? "")}</td>
+          <td>${escapeHtml(candidate.quantityReviewRequired ? "검토 필요" : candidate.materialQuantityTon ?? "")}</td>
           <td>${escapeHtml(candidate.calculationFormula)}</td>
           <td>${escapeHtml(candidate.calculationBasis)}</td>
           <td>${escapeHtml(candidate.sourceFileName ?? "")}</td>

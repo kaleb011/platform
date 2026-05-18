@@ -34,7 +34,7 @@ const typeOptions: Array<{ value: RebarStandardType; label: string; disabled?: b
 ];
 
 const statusLabel: Record<RebarStandardEstimateItem["reviewStatus"], string> = {
-  calculated: "산출 가능",
+  calculated: "품셈 기준 산출 후보",
   price_required: "단가 입력 필요",
   quantity_required: "수량 확인 필요",
   separate_input_required: "별도계상 필요"
@@ -289,13 +289,20 @@ export function RebarStandardEstimatePanel({
           </p>
         </div>
         <div className="rounded-[16px] bg-[#e8f9ef] px-3 py-3">
-          <p className="text-[11px] font-medium text-[#087443]">품셈 산출 가능</p>
+          <p className="text-[11px] font-medium text-[#087443]">품셈 기준 산출 후보</p>
           <p className="mt-1 text-[18px] font-bold text-[#087443]">{calculatedCount}</p>
         </div>
         <div className="rounded-[16px] bg-[#fff8ea] px-3 py-3">
           <p className="text-[11px] font-medium text-[#7a4a05]">단가 입력 필요</p>
           <p className="mt-1 text-[18px] font-bold text-[#7a4a05]">{priceRequiredCount}</p>
         </div>
+      </section>
+
+      <section className="mt-4 rounded-[14px] border border-border bg-[#f8fafc] px-4 py-3 text-[12px] leading-5 text-slate">
+        <p className="font-semibold text-foreground">수량 기준 안내</p>
+        <p className="mt-1">
+          철근 가공/조립 품셈 수량은 승인된 정미중량 기준입니다. 철근 본재 재료비 검토는 LOSS율이 반영된 자재중량을 참고하세요.
+        </p>
       </section>
 
       <section className="mt-4 rounded-[18px] border border-border bg-[#f8fafc] px-4 py-4">

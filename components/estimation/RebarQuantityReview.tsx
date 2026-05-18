@@ -5,20 +5,29 @@ import {
   Check,
   Clock3,
   FileSpreadsheet,
+  Info,
+  Layers3,
   Plus,
   Trash2,
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { CollapsibleResultList } from "@/components/estimation/CollapsibleResultList";
+import { RebarInputSourceBadge } from "@/components/estimation/RebarInputSourceBadge";
+import {
+  getRebarReferenceItems,
+  RebarReferenceGuide
+} from "@/components/estimation/RebarReferenceGuide";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { CollapsibleResultList } from "@/components/estimation/CollapsibleResultList";
 import {
-  getRebarMemberTypeLabel,
-  getRebarPositionLabel,
+  getMissingRebarRequiredInputLabels,
+  getRebarCandidateSourceGroup,
+  isWallRebarDetailReviewRequired,
+  sortRebarQuantityCandidatesBySource,
   summarizeRebarQuantityCandidates
 } from "@/lib/estimation/rebar-quantity";
 import type {
@@ -32,6 +41,7 @@ import type {
 } from "@/lib/estimation/types";
 
 type TemplateMemberType = Exclude<RebarMemberType, "unknown">;
+type BadgeTone = "green" | "blue" | "amber" | "red" | "gray";
 
 type RebarQuantityReviewProps = {
   candidates: RebarQuantityCandidateRecord[];
@@ -43,33 +53,63 @@ type RebarQuantityReviewProps = {
   onRemoveCandidate?: (candidateId: string) => void;
 };
 
-const memberTabs: Array<{ value: TemplateMemberType; label: string; enabled: boolean }> = [
-  { value: "footing", label: "기초", enabled: true },
-  { value: "beam", label: "보", enabled: true },
-  { value: "column", label: "기둥", enabled: true },
-  { value: "slab", label: "슬래브", enabled: true },
-  { value: "wall", label: "벽체", enabled: true }
+const memberTabs: Array<{ value: TemplateMemberType; label: string }> = [
+  { value: "footing", label: "기초" },
+  { value: "beam", label: "보" },
+  { value: "column", label: "기둥" },
+  { value: "slab", label: "슬래브" },
+  { value: "wall", label: "벽체" }
 ];
+
+const memberTypeLabel: Record<RebarMemberType, string> = {
+  footing: "기초",
+  beam: "보",
+  column: "기둥",
+  slab: "슬래브",
+  wall: "벽체",
+  unknown: "부재 미확정"
+};
+
+const positionLabel: Record<RebarPosition, string> = {
+  top: "상부",
+  bottom: "하부",
+  main: "주근",
+  stirrup: "늑근/전단근",
+  tie: "띠철근",
+  x: "X방향",
+  y: "Y방향",
+  x_bottom: "X방향 하부근",
+  y_bottom: "Y방향 하부근",
+  x_top: "X방향 상부근",
+  y_top: "Y방향 상부근",
+  distribution: "배력근",
+  opening_reinforcement: "개구부 보강근",
+  vertical: "수직근",
+  horizontal: "수평근",
+  u_bar: "U-BAR",
+  c_bar: "C-BAR",
+  unknown: "위치 미확정"
+};
 
 const diameterOptions = ["D10", "D13", "D16", "D19", "D22", "D25", "D29", "D32"];
 
 const countRuleOptions: Array<{ value: RebarBarCountRule; label: string }> = [
   { value: "floor_plus_one", label: "floor+1" },
   { value: "ceil_plus_one", label: "ceil+1" },
-  { value: "direct", label: "직접입력" }
+  { value: "direct", label: "직접 본수" }
 ];
 
-const reviewToneMap = {
+const reviewToneMap: Record<RebarReviewStatus, BadgeTone> = {
   pending: "gray",
   accepted: "green",
   rejected: "red"
-} as const;
+};
 
-const reviewLabelMap = {
+const reviewLabelMap: Record<RebarReviewStatus, string> = {
   pending: "보류",
   accepted: "승인",
   rejected: "제외"
-} as const;
+};
 
 function formatNumber(value: number | undefined, fractionDigits = 2) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -83,12 +123,8 @@ function formatNumber(value: number | undefined, fractionDigits = 2) {
 }
 
 function parseOptionalNumber(value: string): number | undefined {
-  if (!value.trim()) {
-    return undefined;
-  }
-
+  if (!value.trim()) return undefined;
   const parsed = Number(value);
-
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
@@ -109,34 +145,119 @@ function sourceLabel(
   return `${candidate.sourceFileName ?? "직접 추가"}${candidate.sourcePage ? ` / p.${candidate.sourcePage}` : ""}`;
 }
 
+function getSourceGroupLabel(candidate: RebarQuantityCandidateRecord) {
+  const group = getRebarCandidateSourceGroup(candidate);
+
+  if (group === "schedule") return { label: "구조일람표 기반 후보", tone: "green" as BadgeTone };
+  if (group === "plan") return { label: "구조평면도 기반 보조 후보", tone: "blue" as BadgeTone };
+  return { label: "참고 문구 / 검토 필요", tone: "amber" as BadgeTone };
+}
+
+function getInputSourceLabel(field: string, memberType: RebarMemberType) {
+  if (["coverMm", "anchorageLengthMm", "spliceLengthMm", "hookLengthMm"].includes(field)) {
+    return "구조 일반사항 확인값";
+  }
+
+  if (["lossRate", "bendCorrectionMm", "manualBarCount", "barCountRule"].includes(field)) {
+    return "사용자 판단값";
+  }
+
+  if (["memberCount", "memberLengthMm", "slabLengthMm", "slabWidthMm", "wallLengthMm"].includes(field)) {
+    return "구조평면도 확인값";
+  }
+
+  if (["memberHeightMm", "wallHeightMm"].includes(field)) {
+    return memberType === "column" || memberType === "wall"
+      ? "단면도/구조평면도 확인값"
+      : "구조평면도 확인값";
+  }
+
+  if (
+    [
+      "footingWidthMm",
+      "footingLengthMm",
+      "sectionWidthMm",
+      "sectionDepthMm",
+      "slabThicknessMm",
+      "wallThicknessMm",
+      "diameter",
+      "spacingMm",
+      "position",
+      "footingLayer"
+    ].includes(field)
+  ) {
+    return memberType === "wall" ? "상세도 확인값" : "구조일람표 확인값";
+  }
+
+  if (field === "faceCount") return "배근상세도 확인값";
+
+  return "사용자 보정값";
+}
+
 function Field({
+  children,
+  hint,
   label,
-  children
+  missing,
+  required,
+  source
 }: {
-  label: string;
   children: React.ReactNode;
+  hint?: string;
+  label: string;
+  missing?: boolean;
+  required?: boolean;
+  source?: string;
 }) {
   return (
     <label className="block">
-      <span className="text-[11px] font-semibold text-slate">{label}</span>
+      <span className="flex min-h-5 flex-wrap items-center gap-1.5 text-[11px] font-semibold text-slate">
+        <span className={missing ? "text-[#b42318]" : ""}>
+          {label}
+          {required ? " *" : ""}
+        </span>
+        {source ? <RebarInputSourceBadge label={source} /> : null}
+      </span>
       {children}
+      {hint ? <span className="mt-1 block text-[10px] leading-4 text-slate">{hint}</span> : null}
+      {missing ? (
+        <span className="mt-1 block text-[10px] font-semibold leading-4 text-[#b42318]">
+          필수 입력값 확인 필요
+        </span>
+      ) : null}
     </label>
   );
 }
 
 function NumberInput({
+  field,
   label,
+  memberType,
+  missing,
   onChange,
+  required,
   value
 }: {
+  field: string;
   label: string;
+  memberType: RebarMemberType;
+  missing?: boolean;
   onChange: (value: number | undefined) => void;
+  required?: boolean;
   value: number | undefined;
 }) {
   return (
-    <Field label={label}>
+    <Field
+      label={label}
+      missing={missing}
+      required={required}
+      source={getInputSourceLabel(field, memberType)}
+    >
       <input
-        className="mt-1 h-10 w-full rounded-[10px] border border-border bg-white px-3 text-right text-[13px] font-semibold text-foreground outline-none transition focus:border-primary"
+        className={[
+          "mt-1 h-10 w-full rounded-[10px] border bg-white px-3 text-right text-[13px] font-semibold text-foreground outline-none transition focus:border-primary",
+          missing ? "border-[#f3a19a] bg-[#fff8f7]" : "border-border"
+        ].join(" ")}
         inputMode="decimal"
         min="0"
         onChange={(event) => onChange(parseOptionalNumber(event.target.value))}
@@ -148,20 +269,36 @@ function NumberInput({
 }
 
 function SelectField<T extends string>({
+  field,
   label,
+  memberType,
+  missing,
   onChange,
   options,
+  required,
   value
 }: {
+  field: string;
   label: string;
+  memberType: RebarMemberType;
+  missing?: boolean;
   onChange: (value: T) => void;
   options: Array<{ value: T; label: string; disabled?: boolean }>;
+  required?: boolean;
   value: T;
 }) {
   return (
-    <Field label={label}>
+    <Field
+      label={label}
+      missing={missing}
+      required={required}
+      source={getInputSourceLabel(field, memberType)}
+    >
       <select
-        className="mt-1 h-10 w-full rounded-[10px] border border-border bg-white px-3 text-[13px] font-semibold text-foreground outline-none transition focus:border-primary"
+        className={[
+          "mt-1 h-10 w-full rounded-[10px] border bg-white px-3 text-[13px] font-semibold text-foreground outline-none transition focus:border-primary",
+          missing ? "border-[#f3a19a] bg-[#fff8f7]" : "border-border"
+        ].join(" ")}
         onChange={(event) => onChange(event.target.value as T)}
         value={value}
       >
@@ -175,160 +312,319 @@ function SelectField<T extends string>({
   );
 }
 
+function getPositionOptions(activeType: TemplateMemberType): Array<{ value: RebarPosition; label: string }> {
+  if (activeType === "footing") {
+    return [
+      { value: "x", label: "X방향" },
+      { value: "y", label: "Y방향" }
+    ];
+  }
+
+  if (activeType === "beam") {
+    return [
+      { value: "main", label: "주근" },
+      { value: "stirrup", label: "늑근/전단근" }
+    ];
+  }
+
+  if (activeType === "column") {
+    return [
+      { value: "main", label: "주근" },
+      { value: "tie", label: "띠철근" }
+    ];
+  }
+
+  if (activeType === "slab") {
+    return [
+      { value: "x_bottom", label: "X방향 하부근" },
+      { value: "y_bottom", label: "Y방향 하부근" },
+      { value: "x_top", label: "X방향 상부근" },
+      { value: "y_top", label: "Y방향 상부근" },
+      { value: "distribution", label: "배력근" },
+      { value: "opening_reinforcement", label: "개구부 보강근" }
+    ];
+  }
+
+  return [
+    { value: "vertical", label: "수직근" },
+    { value: "horizontal", label: "수평근" },
+    { value: "u_bar", label: "U-BAR" },
+    { value: "c_bar", label: "C-BAR" },
+    { value: "opening_reinforcement", label: "개구부 보강근" }
+  ];
+}
+
+function ExtractedValue({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-[10px] bg-white px-3 py-2">
+      <p className="text-[10px] font-semibold text-slate">{label}</p>
+      <p className="mt-1 break-words text-[12px] font-semibold text-foreground">{value || "-"}</p>
+    </div>
+  );
+}
+
+function DrawingExtractedValues({
+  candidate,
+  drawingSheets
+}: {
+  candidate: RebarQuantityCandidateRecord;
+  drawingSheets: DrawingSheetIndexRecord[];
+}) {
+  const dimensionLabel = [
+    candidate.sectionWidthMm && candidate.sectionDepthMm
+      ? `${candidate.sectionWidthMm}x${candidate.sectionDepthMm}`
+      : null,
+    candidate.footingWidthMm && candidate.footingLengthMm
+      ? `기초 ${candidate.footingWidthMm}x${candidate.footingLengthMm}`
+      : null,
+    candidate.slabThicknessMm ? `슬래브 두께 ${candidate.slabThicknessMm}` : null,
+    candidate.wallThicknessMm ? `벽 두께 ${candidate.wallThicknessMm}` : null
+  ]
+    .filter(Boolean)
+    .join(" / ");
+
+  return (
+    <section className="rounded-[14px] border border-border bg-[#f8fafc] px-4 py-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Layers3 className="h-4 w-4 text-primary" />
+        <h4 className="text-[13px] font-bold text-foreground">도면 추출값</h4>
+        <Badge tone="gray">읽기 전용</Badge>
+      </div>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+        <ExtractedValue label="부재명" value={candidate.memberName ?? "부재명 미확인"} />
+        <ExtractedValue label="부재 종류" value={memberTypeLabel[candidate.memberType]} />
+        <ExtractedValue label="철근 종류" value={positionLabel[candidate.position]} />
+        <ExtractedValue label="철근 규격" value={candidate.diameter} />
+        <ExtractedValue label="철근 개수" value={candidate.barCount} />
+        <ExtractedValue
+          label="철근 간격"
+          value={candidate.spacingMm ? `@${candidate.spacingMm}` : "-"}
+        />
+        <ExtractedValue label="단면/두께" value={dimensionLabel} />
+        <ExtractedValue label="출처" value={sourceLabel(candidate, drawingSheets)} />
+      </div>
+      {candidate.sourceTextSnippet ? (
+        <p className="mt-3 line-clamp-3 rounded-[10px] bg-white px-3 py-2 text-[11px] leading-5 text-slate">
+          원문: {candidate.sourceTextSnippet}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function RelatedDrawingRecommendation({ memberType }: { memberType: RebarMemberType }) {
+  const items = getRebarReferenceItems(memberType);
+
+  if (items.length === 0) return null;
+
+  return (
+    <section className="rounded-[14px] border border-[#b7d9ff] bg-[#f4f9ff] px-4 py-4">
+      <div className="mb-2 flex items-center gap-2">
+        <Info className="h-4 w-4 text-[#2157a3]" />
+        <h4 className="text-[13px] font-bold text-foreground">관련 도면 추천</h4>
+      </div>
+      <ul className="grid gap-1.5 text-[12px] leading-5 text-slate">
+        {items.map((item) => (
+          <li key={`${item.title}-${item.detail}`}>
+            <span className="font-semibold text-foreground">{item.detail}:</span> {item.title} 확인
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function CandidateButton({
+  candidate,
+  drawingSheets,
+  onSelect,
+  selected
+}: {
+  candidate: RebarQuantityCandidateRecord;
+  drawingSheets: DrawingSheetIndexRecord[];
+  onSelect: (id: string) => void;
+  selected: boolean;
+}) {
+  const sourceGroup = getSourceGroupLabel(candidate);
+  const wallReviewRequired = isWallRebarDetailReviewRequired(candidate);
+
+  return (
+    <button
+      className={[
+        "rounded-[14px] border px-3 py-3 text-left transition",
+        selected ? "border-primary bg-primary/5" : "border-border bg-white hover:border-primary/40"
+      ].join(" ")}
+      onClick={() => onSelect(candidate.id)}
+      type="button"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-bold text-foreground">
+            {candidate.memberName ?? "부재명 미확인"} · {candidate.diameter}
+          </p>
+          <p className="mt-1 truncate text-[11px] text-slate">
+            {sourceLabel(candidate, drawingSheets)}
+          </p>
+        </div>
+        <Badge tone={reviewToneMap[candidate.reviewStatus]}>
+          {reviewLabelMap[candidate.reviewStatus]}
+        </Badge>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <Badge tone={sourceGroup.tone}>{sourceGroup.label}</Badge>
+        <Badge tone="gray">{positionLabel[candidate.position]}</Badge>
+        {wallReviewRequired ? <Badge tone="amber">배근 상세 확인 필요</Badge> : null}
+        {candidate.quantityReviewRequired ? (
+          <Badge tone="amber">수량 확인 필요</Badge>
+        ) : (
+          <Badge tone="green">{formatNumber(candidate.quantityKg)}kg</Badge>
+        )}
+      </div>
+    </button>
+  );
+}
+
 function CandidateList({
-  activeType,
   candidates,
   drawingSheets,
   onSelect,
   selectedId
 }: {
-  activeType: TemplateMemberType;
   candidates: RebarQuantityCandidateRecord[];
   drawingSheets: DrawingSheetIndexRecord[];
   onSelect: (id: string) => void;
   selectedId?: string;
 }) {
+  const scheduleCandidates = candidates.filter(
+    (candidate) => getRebarCandidateSourceGroup(candidate) === "schedule"
+  );
+  const planCandidates = candidates.filter(
+    (candidate) => getRebarCandidateSourceGroup(candidate) === "plan"
+  );
+  const noteCandidates = candidates.filter(
+    (candidate) => getRebarCandidateSourceGroup(candidate) === "note"
+  );
+
   if (candidates.length === 0) {
     return (
       <div className="rounded-[14px] border border-dashed border-border bg-[#f8fafc] px-4 py-5 text-[12px] leading-5 text-slate">
-        {getRebarMemberTypeLabel(activeType)} 후보가 없습니다. 직접 부재 추가로 산출 템플릿을 만들 수 있습니다.
+        표시할 철근 후보가 없습니다. 직접 부재를 추가해 수량산출 템플릿을 만들 수 있습니다.
       </div>
     );
   }
 
-  return (
-    <CollapsibleResultList
-      emptyMessage={`${getRebarMemberTypeLabel(activeType)} 후보가 없습니다. 직접 부재 추가로 산출 템플릿을 만들 수 있습니다.`}
-      items={candidates}
-      renderItem={(candidate) => {
-        const selected = selectedId === candidate.id;
-
-        return (
-          <button
-            className={[
-              "rounded-[14px] border px-3 py-3 text-left transition",
-              selected ? "border-primary bg-primary/5" : "border-border bg-white hover:border-primary/40"
-            ].join(" ")}
-            key={candidate.id}
-            onClick={() => onSelect(candidate.id)}
-            type="button"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-[13px] font-bold text-foreground">
-                  {candidate.memberName ?? "부재명 미확인"} · {candidate.diameter}
-                </p>
-                <p className="mt-1 truncate text-[11px] text-slate">
-                  {sourceLabel(candidate, drawingSheets)}
-                </p>
-              </div>
-              <Badge tone={reviewToneMap[candidate.reviewStatus]}>
-                {reviewLabelMap[candidate.reviewStatus]}
-              </Badge>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <Badge tone="blue">{getRebarMemberTypeLabel(candidate.memberType)}</Badge>
-              <Badge tone="gray">{getRebarPositionLabel(candidate.position)}</Badge>
-              {candidate.quantityReviewRequired ? (
-                <Badge tone="amber">검토 필요</Badge>
-              ) : (
-                <Badge tone="green">{formatNumber(candidate.quantityKg)}kg</Badge>
-              )}
-            </div>
-          </button>
-        );
-      }}
+  const renderCandidate = (candidate: RebarQuantityCandidateRecord) => (
+    <CandidateButton
+      candidate={candidate}
+      drawingSheets={drawingSheets}
+      key={candidate.id}
+      onSelect={onSelect}
+      selected={selectedId === candidate.id}
     />
+  );
+
+  return (
+    <div className="grid gap-4">
+      <CollapsibleResultList
+        emptyMessage="구조일람표 기반 후보가 없습니다."
+        initialVisibleCount={5}
+        items={scheduleCandidates}
+        renderItem={renderCandidate}
+        summaryLabel={`일람표 후보 ${scheduleCandidates.length}개`}
+        title="구조일람표 기반 후보"
+      />
+      <CollapsibleResultList
+        emptyMessage="구조평면도 기반 보조 후보가 없습니다."
+        initialVisibleCount={3}
+        items={planCandidates}
+        renderItem={renderCandidate}
+        summaryLabel={`보조 후보 ${planCandidates.length}개`}
+        title="구조평면도 기반 보조 후보"
+      />
+      <CollapsibleResultList
+        emptyMessage="일반사항/노트 기반 참고 후보가 없습니다."
+        initialVisibleCount={3}
+        items={noteCandidates}
+        renderItem={renderCandidate}
+        summaryLabel={`검토 필요 ${noteCandidates.length}개`}
+        title="참고 문구 / 검토 필요"
+      />
+    </div>
   );
 }
 
 function TemplateInputs({
   activeType,
   candidate,
+  missingRequiredLabels,
   onChange
 }: {
   activeType: TemplateMemberType;
   candidate: RebarQuantityCandidateRecord;
+  missingRequiredLabels: string[];
   onChange: (updates: Partial<RebarQuantityCandidateRecord>) => void;
 }) {
-  const positionOptions: Array<{ value: RebarPosition; label: string }> =
-    activeType === "footing"
-      ? [
-          { value: "x", label: "X방향" },
-          { value: "y", label: "Y방향" }
-        ]
-      : activeType === "beam"
-        ? [
-            { value: "main", label: "주근" },
-            { value: "stirrup", label: "늑근" }
-          ]
-        : activeType === "column"
-          ? [
-              { value: "main", label: "주근" },
-              { value: "tie", label: "띠철근" }
-            ]
-          : activeType === "slab"
-            ? [
-                { value: "x_bottom", label: "X방향 하부근" },
-                { value: "y_bottom", label: "Y방향 하부근" },
-                { value: "x_top", label: "X방향 상부근" },
-                { value: "y_top", label: "Y방향 상부근" },
-                { value: "distribution", label: "배력근" },
-                { value: "opening_reinforcement", label: "개구부 보강근" }
-              ]
-            : [
-                { value: "vertical", label: "수직근" },
-                { value: "horizontal", label: "수평근" },
-                { value: "u_bar", label: "U-BAR" },
-                { value: "c_bar", label: "C-BAR" },
-                { value: "opening_reinforcement", label: "개구부 보강근" }
-              ];
+  const positionOptions = getPositionOptions(activeType);
+  const missing = (label: string) => missingRequiredLabels.includes(label);
 
   return (
     <div className="grid gap-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Field label="부재명">
-          <input
-            className="mt-1 h-10 w-full rounded-[10px] border border-border bg-white px-3 text-[13px] font-semibold text-foreground outline-none transition focus:border-primary"
-            onChange={(event) => onChange({ memberName: event.target.value })}
-            value={candidate.memberName ?? ""}
+      <section>
+        <h4 className="mb-3 text-[13px] font-bold text-foreground">사용자 보정값</h4>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="부재명" source="도면 추출값 또는 사용자 보정">
+            <input
+              className="mt-1 h-10 w-full rounded-[10px] border border-border bg-white px-3 text-[13px] font-semibold text-foreground outline-none transition focus:border-primary"
+              onChange={(event) => onChange({ memberName: event.target.value })}
+              value={candidate.memberName ?? ""}
+            />
+          </Field>
+          <SelectField
+            field="memberType"
+            label="부재 종류"
+            memberType={candidate.memberType}
+            onChange={(value: RebarMemberType) => onChange({ memberType: value })}
+            options={[
+              { value: "footing", label: "기초" },
+              { value: "beam", label: "보" },
+              { value: "column", label: "기둥" },
+              { value: "slab", label: "슬래브" },
+              { value: "wall", label: "벽체" },
+              { value: "unknown", label: "미확정" }
+            ]}
+            value={candidate.memberType}
           />
-        </Field>
-        <SelectField
-          label="부재 종류"
-          onChange={(value: RebarMemberType) => onChange({ memberType: value })}
-          options={[
-            { value: "footing", label: "기초" },
-            { value: "beam", label: "보" },
-            { value: "column", label: "기둥" },
-            { value: "slab", label: "슬래브" },
-            { value: "wall", label: "벽체" },
-            { value: "unknown", label: "미확정" }
-          ]}
-          value={candidate.memberType}
-        />
-        <SelectField
-          label={activeType === "footing" ? "방향" : "철근 종류"}
-          onChange={(value: RebarPosition) => onChange({ position: value })}
-          options={positionOptions}
-          value={
-            positionOptions.some((option) => option.value === candidate.position)
-              ? candidate.position
-              : positionOptions[0].value
-          }
-        />
-        <SelectField
-          label="철근 규격"
-          onChange={(value: string) => onChange({ diameter: value })}
-          options={diameterOptions.map((diameter) => ({ value: diameter, label: diameter }))}
-          value={candidate.diameter}
-        />
-      </div>
+          <SelectField
+            field="position"
+            label={activeType === "footing" ? "방향" : "철근 종류"}
+            memberType={candidate.memberType}
+            missing={missing("방향 X/Y") || missing("철근 종류 주근/늑근") || missing("철근 종류 주근/띠철근") || missing("X/Y 방향 및 상부/하부") || missing("수직근/수평근")}
+            onChange={(value: RebarPosition) => onChange({ position: value })}
+            options={positionOptions}
+            required
+            value={
+              positionOptions.some((option) => option.value === candidate.position)
+                ? candidate.position
+                : positionOptions[0].value
+            }
+          />
+          <SelectField
+            field="diameter"
+            label="철근 규격"
+            memberType={candidate.memberType}
+            onChange={(value: string) => onChange({ diameter: value })}
+            options={diameterOptions.map((diameter) => ({ value: diameter, label: diameter }))}
+            value={candidate.diameter}
+          />
+        </div>
+      </section>
 
       {activeType === "footing" ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <SelectField
+            field="footingLayer"
             label="상부/하부"
+            memberType={candidate.memberType}
             onChange={(value: RebarFootingLayer) => onChange({ footingLayer: value })}
             options={[
               { value: "top", label: "상부근" },
@@ -337,18 +633,30 @@ function TemplateInputs({
             value={candidate.footingLayer ?? "top"}
           />
           <NumberInput
+            field="footingWidthMm"
             label="기초 폭 mm"
+            memberType={candidate.memberType}
+            missing={missing("기초 폭")}
             onChange={(value) => onChange({ footingWidthMm: value })}
+            required
             value={candidate.footingWidthMm}
           />
           <NumberInput
+            field="footingLengthMm"
             label="기초 길이 mm"
+            memberType={candidate.memberType}
+            missing={missing("기초 길이")}
             onChange={(value) => onChange({ footingLengthMm: value })}
+            required
             value={candidate.footingLengthMm}
           />
           <NumberInput
-            label="간격 mm"
+            field="spacingMm"
+            label="철근 간격 mm"
+            memberType={candidate.memberType}
+            missing={missing("철근 간격 또는 직접 본수")}
             onChange={(value) => onChange({ spacingMm: value })}
+            required
             value={candidate.spacingMm}
           />
         </div>
@@ -357,22 +665,37 @@ function TemplateInputs({
       {activeType === "beam" ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <NumberInput
+            field="memberLengthMm"
             label="보 길이 mm"
+            memberType={candidate.memberType}
+            missing={missing("보 길이")}
             onChange={(value) => onChange({ memberLengthMm: value })}
+            required
             value={candidate.memberLengthMm}
           />
           <NumberInput
+            field="sectionWidthMm"
             label="보 폭 mm"
+            memberType={candidate.memberType}
+            missing={missing("보 폭")}
             onChange={(value) => onChange({ sectionWidthMm: value })}
+            required
             value={candidate.sectionWidthMm}
           />
           <NumberInput
+            field="sectionDepthMm"
             label="보 춤 mm"
+            memberType={candidate.memberType}
+            missing={missing("보 춤")}
             onChange={(value) => onChange({ sectionDepthMm: value })}
+            required
             value={candidate.sectionDepthMm}
           />
           <NumberInput
+            field="spacingMm"
             label="늑근 간격 mm"
+            memberType={candidate.memberType}
+            missing={missing("철근 개수 또는 늑근 간격")}
             onChange={(value) => onChange({ spacingMm: value })}
             value={candidate.spacingMm}
           />
@@ -382,22 +705,37 @@ function TemplateInputs({
       {activeType === "column" ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <NumberInput
+            field="memberHeightMm"
             label="기둥 높이 mm"
+            memberType={candidate.memberType}
+            missing={missing("기둥 높이")}
             onChange={(value) => onChange({ memberHeightMm: value })}
+            required
             value={candidate.memberHeightMm}
           />
           <NumberInput
+            field="sectionWidthMm"
             label="기둥 폭 mm"
+            memberType={candidate.memberType}
+            missing={missing("기둥 폭")}
             onChange={(value) => onChange({ sectionWidthMm: value })}
+            required
             value={candidate.sectionWidthMm}
           />
           <NumberInput
+            field="sectionDepthMm"
             label="기둥 춤 mm"
+            memberType={candidate.memberType}
+            missing={missing("기둥 춤")}
             onChange={(value) => onChange({ sectionDepthMm: value })}
+            required
             value={candidate.sectionDepthMm}
           />
           <NumberInput
+            field="spacingMm"
             label="띠철근 간격 mm"
+            memberType={candidate.memberType}
+            missing={missing("철근 개수 또는 띠철근 간격")}
             onChange={(value) => onChange({ spacingMm: value })}
             value={candidate.spacingMm}
           />
@@ -407,27 +745,43 @@ function TemplateInputs({
       {activeType === "slab" ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <NumberInput
+            field="slabLengthMm"
             label="슬래브 길이 mm"
+            memberType={candidate.memberType}
+            missing={missing("슬래브 길이")}
             onChange={(value) => onChange({ slabLengthMm: value, memberLengthMm: value })}
+            required
             value={candidate.slabLengthMm ?? candidate.memberLengthMm}
           />
           <NumberInput
+            field="slabWidthMm"
             label="슬래브 폭 mm"
+            memberType={candidate.memberType}
+            missing={missing("슬래브 폭")}
             onChange={(value) => onChange({ slabWidthMm: value, sectionWidthMm: value })}
+            required
             value={candidate.slabWidthMm ?? candidate.sectionWidthMm}
           />
           <NumberInput
+            field="slabThicknessMm"
             label="슬래브 두께 mm"
+            memberType={candidate.memberType}
             onChange={(value) => onChange({ slabThicknessMm: value, sectionDepthMm: value })}
             value={candidate.slabThicknessMm ?? candidate.sectionDepthMm}
           />
           <NumberInput
-            label="간격 mm"
+            field="spacingMm"
+            label="철근 간격 mm"
+            memberType={candidate.memberType}
+            missing={missing("철근 간격")}
             onChange={(value) => onChange({ spacingMm: value })}
+            required
             value={candidate.spacingMm}
           />
           <NumberInput
+            field="directBarLengthMm"
             label="직접 산출길이 mm"
+            memberType={candidate.memberType}
             onChange={(value) => onChange({ directBarLengthMm: value })}
             value={candidate.directBarLengthMm}
           />
@@ -437,27 +791,43 @@ function TemplateInputs({
       {activeType === "wall" ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <NumberInput
+            field="wallLengthMm"
             label="벽 길이 mm"
+            memberType={candidate.memberType}
+            missing={missing("벽 길이")}
             onChange={(value) => onChange({ wallLengthMm: value, memberLengthMm: value })}
+            required
             value={candidate.wallLengthMm ?? candidate.memberLengthMm}
           />
           <NumberInput
+            field="wallHeightMm"
             label="벽 높이 mm"
+            memberType={candidate.memberType}
+            missing={missing("벽 높이")}
             onChange={(value) => onChange({ wallHeightMm: value, memberHeightMm: value })}
+            required
             value={candidate.wallHeightMm ?? candidate.memberHeightMm}
           />
           <NumberInput
+            field="wallThicknessMm"
             label="벽 두께 mm"
+            memberType={candidate.memberType}
             onChange={(value) => onChange({ wallThicknessMm: value, sectionDepthMm: value })}
             value={candidate.wallThicknessMm ?? candidate.sectionDepthMm}
           />
           <NumberInput
-            label="간격 mm"
+            field="spacingMm"
+            label="철근 간격 mm"
+            memberType={candidate.memberType}
+            missing={missing("철근 간격")}
             onChange={(value) => onChange({ spacingMm: value })}
+            required
             value={candidate.spacingMm}
           />
           <NumberInput
+            field="directBarLengthMm"
             label="직접 산출길이 mm"
+            memberType={candidate.memberType}
             onChange={(value) => onChange({ directBarLengthMm: value })}
             value={candidate.directBarLengthMm}
           />
@@ -466,56 +836,83 @@ function TemplateInputs({
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <NumberInput
+          field="manualBarCount"
           label="직접 본수"
+          memberType={candidate.memberType}
+          missing={missing("철근 간격 또는 직접 본수") || missing("철근 개수 또는 늑근 간격") || missing("철근 개수 또는 띠철근 간격")}
           onChange={(value) => onChange({ barCount: value, manualBarCount: value })}
           value={candidate.manualBarCount ?? candidate.barCount}
         />
         <SelectField
+          field="barCountRule"
           label="본수 산정 방식"
+          memberType={candidate.memberType}
           onChange={(value: RebarBarCountRule) => onChange({ barCountRule: value })}
           options={countRuleOptions}
           value={candidate.barCountRule ?? "floor_plus_one"}
         />
         <NumberInput
+          field="memberCount"
           label="반복 개수"
+          memberType={candidate.memberType}
+          missing={missing("반복 개수")}
           onChange={(value) => onChange({ memberCount: value ?? 1 })}
+          required
           value={candidate.memberCount}
         />
         <NumberInput
+          field="faceCount"
           label="면수"
+          memberType={candidate.memberType}
+          missing={missing("면수")}
           onChange={(value) => onChange({ faceCount: value ?? 1 })}
+          required={activeType === "wall"}
           value={candidate.faceCount ?? 1}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <NumberInput
+          field="coverMm"
           label="피복 mm"
+          memberType={candidate.memberType}
+          missing={missing("피복")}
           onChange={(value) => onChange({ coverMm: value })}
+          required
           value={candidate.coverMm}
         />
         <NumberInput
+          field="anchorageLengthMm"
           label="정착길이 mm"
+          memberType={candidate.memberType}
           onChange={(value) => onChange({ anchorageLengthMm: value })}
           value={candidate.anchorageLengthMm}
         />
         <NumberInput
+          field="spliceLengthMm"
           label="이음길이 mm"
+          memberType={candidate.memberType}
           onChange={(value) => onChange({ spliceLengthMm: value })}
           value={candidate.spliceLengthMm}
         />
         <NumberInput
+          field="hookLengthMm"
           label="갈고리길이 mm"
+          memberType={candidate.memberType}
           onChange={(value) => onChange({ hookLengthMm: value })}
           value={candidate.hookLengthMm}
         />
         <NumberInput
+          field="bendCorrectionMm"
           label="절곡보정 mm"
+          memberType={candidate.memberType}
           onChange={(value) => onChange({ bendCorrectionMm: value })}
           value={candidate.bendCorrectionMm}
         />
         <NumberInput
+          field="lossRate"
           label="LOSS율"
+          memberType={candidate.memberType}
           onChange={(value) => onChange({ lossRate: value })}
           value={candidate.lossRate}
         />
@@ -538,8 +935,10 @@ export function RebarQuantityReview({
   const summary = useMemo(() => summarizeRebarQuantityCandidates(candidates), [candidates]);
   const activeCandidates = useMemo(
     () =>
-      candidates.filter(
-        (candidate) => candidate.memberType === activeType || candidate.memberType === "unknown"
+      sortRebarQuantityCandidatesBySource(
+        candidates.filter(
+          (candidate) => candidate.memberType === activeType || candidate.memberType === "unknown"
+        )
       ),
     [activeType, candidates]
   );
@@ -547,6 +946,16 @@ export function RebarQuantityReview({
     () => activeCandidates.find((candidate) => candidate.id === selectedId) ?? activeCandidates[0],
     [activeCandidates, selectedId]
   );
+  const selectedMemberType =
+    selectedCandidate && selectedCandidate.memberType !== "unknown"
+      ? (selectedCandidate.memberType as TemplateMemberType)
+      : activeType;
+  const missingRequiredLabels = selectedCandidate
+    ? getMissingRebarRequiredInputLabels(selectedCandidate)
+    : [];
+  const wallDetailReviewRequired = selectedCandidate
+    ? isWallRebarDetailReviewRequired(selectedCandidate)
+    : false;
 
   useEffect(() => {
     if (!selectedCandidate) {
@@ -561,17 +970,14 @@ export function RebarQuantityReview({
 
   const handleAddCandidate = () => {
     const newId = onAddCandidate?.(activeType);
-
-    if (typeof newId === "string") {
-      setSelectedId(newId);
-    }
+    if (typeof newId === "string") setSelectedId(newId);
   };
 
   return (
     <Card className="section-enter bg-white shadow-sm">
       <SectionHeading
-        title="철근 실무식 수량산출"
-        description="파싱된 철근 후보를 부재 종류별 템플릿에 배치하고, 승인된 항목만 물량내역과 철근 품셈 산출로 전달합니다."
+        title="철근 실무식 수량산출 후보"
+        description="도면 텍스트 기반 후보를 부재별로 검토하고, 사용자가 확인한 보정값으로 승인 후 적산내역과 품셈 산출에 반영합니다."
         action={
           onExportExcel ? (
             <Button
@@ -593,13 +999,13 @@ export function RebarQuantityReview({
           <p className="mt-1 text-[18px] font-bold text-foreground">{summary.totalCandidates}</p>
         </div>
         <div className="rounded-[14px] bg-[#eef6ff] px-3 py-3">
-          <p className="text-[11px] font-medium text-slate">계산 가능</p>
+          <p className="text-[11px] font-medium text-slate">검토 후 산출 가능</p>
           <p className="mt-1 text-[18px] font-bold text-foreground">
             {summary.calculatedCandidates}
           </p>
         </div>
         <div className="rounded-[14px] bg-[#fff8ea] px-3 py-3">
-          <p className="text-[11px] font-medium text-[#7a4a05]">검토 필요</p>
+          <p className="text-[11px] font-medium text-[#7a4a05]">수량 확인 필요</p>
           <p className="mt-1 text-[18px] font-bold text-[#7a4a05]">
             {summary.reviewRequiredCandidates}
           </p>
@@ -635,21 +1041,20 @@ export function RebarQuantityReview({
             >
               {tab.label}
               <span className="ml-1 text-[11px] font-semibold">({count})</span>
-              {!tab.enabled ? <span className="ml-1 text-[10px] font-semibold">후속</span> : null}
             </button>
           );
         })}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
         <aside className="rounded-[18px] border border-border bg-[#f8fafc] p-3">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div>
               <h3 className="text-[14px] font-bold text-foreground">
-                {getRebarMemberTypeLabel(activeType)} 후보
+                {memberTypeLabel[activeType]} 후보
               </h3>
               <p className="mt-1 text-[11px] leading-4 text-slate">
-                미분류 후보는 현재 탭에서 선택 후 부재 종류를 확정할 수 있습니다.
+                구조일람표 후보를 먼저 보고, 일반사항/노트 후보는 참고 문구로 검토하세요.
               </p>
             </div>
             <Button
@@ -662,7 +1067,6 @@ export function RebarQuantityReview({
             </Button>
           </div>
           <CandidateList
-            activeType={activeType}
             candidates={activeCandidates}
             drawingSheets={drawingSheets}
             onSelect={setSelectedId}
@@ -672,17 +1076,22 @@ export function RebarQuantityReview({
 
         <section className="rounded-[18px] border border-border bg-white p-4">
           {selectedCandidate ? (
-            <>
+            <div className="grid gap-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <Calculator className="h-4 w-4 text-primary" />
                     <h3 className="text-[16px] font-bold text-foreground">
-                      {selectedCandidate.memberName ?? "부재명 미확인"} 산출 템플릿
+                      {selectedCandidate.memberName ?? "부재명 미확인"} 수량산출 후보
                     </h3>
                     <Badge tone={reviewToneMap[selectedCandidate.reviewStatus]}>
                       {reviewLabelMap[selectedCandidate.reviewStatus]}
                     </Badge>
+                    {selectedCandidate.quantityReviewRequired ? (
+                      <Badge tone="amber">수량 확인 필요</Badge>
+                    ) : (
+                      <Badge tone="green">검토 후 산출 가능</Badge>
+                    )}
                   </div>
                   <p className="mt-1 text-[12px] leading-5 text-slate">
                     {sourceLabel(selectedCandidate, drawingSheets)}
@@ -727,19 +1136,27 @@ export function RebarQuantityReview({
                 </div>
               </div>
 
-              <div className="mt-4">
-                <TemplateInputs
-                  activeType={
-                    selectedCandidate.memberType !== "unknown"
-                      ? (selectedCandidate.memberType as TemplateMemberType)
-                      : activeType
-                  }
-                  candidate={selectedCandidate}
-                  onChange={(updates) => onChangeCandidate(selectedCandidate.id, updates)}
-                />
-              </div>
+              <RelatedDrawingRecommendation memberType={selectedMemberType} />
+              <RebarReferenceGuide memberType={selectedMemberType} />
+              <DrawingExtractedValues candidate={selectedCandidate} drawingSheets={drawingSheets} />
 
-              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+              {wallDetailReviewRequired ? (
+                <div className="rounded-[14px] border border-[#f2c94c] bg-[#fffaf0] px-4 py-3 text-[12px] leading-5 text-[#7a4a05]">
+                  <p className="font-bold">배근 상세 확인 필요</p>
+                  <p className="mt-1">
+                    벽체 위치와 두께는 확인되었지만, 수직근/수평근 배근 상세는 별도 도면 또는 구조 일반사항 확인이 필요합니다.
+                  </p>
+                </div>
+              ) : null}
+
+              <TemplateInputs
+                activeType={selectedMemberType}
+                candidate={selectedCandidate}
+                missingRequiredLabels={missingRequiredLabels}
+                onChange={(updates) => onChangeCandidate(selectedCandidate.id, updates)}
+              />
+
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <div className="rounded-[14px] bg-[#f8fafc] px-3 py-3">
                   <p className="text-[11px] font-medium text-slate">철근 본수</p>
                   <p className="mt-1 text-[18px] font-bold text-foreground">
@@ -751,30 +1168,33 @@ export function RebarQuantityReview({
                   <p className="mt-1 text-[18px] font-bold text-[#087443]">
                     {formatNumber(selectedCandidate.quantityKg)}
                   </p>
+                  <p className="mt-1 text-[10px] leading-4 text-[#087443]">
+                    철근 가공 및 조립 품셈 적용 기준
+                  </p>
                 </div>
                 <div className="rounded-[14px] bg-[#fff8ea] px-3 py-3">
                   <p className="text-[11px] font-medium text-[#7a4a05]">자재중량 kg</p>
                   <p className="mt-1 text-[18px] font-bold text-[#7a4a05]">
                     {formatNumber(selectedCandidate.materialQuantityKg)}
                   </p>
+                  <p className="mt-1 text-[10px] leading-4 text-[#7a4a05]">
+                    철근 본재 재료비 산출 참고 기준, LOSS율은 자재중량에만 반영
+                  </p>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-[14px] border border-border bg-[#f8fafc] px-4 py-4">
+              <div className="rounded-[14px] border border-border bg-[#f8fafc] px-4 py-4">
                 <p className="text-[12px] font-bold text-foreground">산출식 미리보기</p>
                 <p className="mt-2 text-[12px] leading-5 text-foreground">
-                  {selectedCandidate.calculationFormula}
+                  {missingRequiredLabels.length > 0
+                    ? `필수 입력값 부족: ${missingRequiredLabels.join(", ")}`
+                    : selectedCandidate.calculationFormula}
                 </p>
                 <p className="mt-2 text-[11px] leading-5 text-slate">
                   {selectedCandidate.calculationBasis}
                 </p>
-                {selectedCandidate.sourceTextSnippet ? (
-                  <p className="mt-2 line-clamp-3 text-[11px] leading-4 text-slate">
-                    원문: {selectedCandidate.sourceTextSnippet}
-                  </p>
-                ) : null}
               </div>
-            </>
+            </div>
           ) : (
             <div className="rounded-[14px] border border-dashed border-border bg-[#f8fafc] px-4 py-8 text-center text-[13px] leading-6 text-slate">
               선택된 철근 후보가 없습니다. 왼쪽에서 후보를 선택하거나 직접 부재를 추가하세요.

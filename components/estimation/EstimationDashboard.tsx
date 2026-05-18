@@ -381,9 +381,9 @@ export function EstimationDashboard() {
     },
     {
       key: "amountReady",
-      label: "금액 산출 가능",
+      label: "금액 산출 후보",
       value: `${manualEstimateStatementSummary.calculatedCount}`,
-      footnote: "수량과 사용자가 입력한 공사단가로 금액 산출 가능한 항목",
+      footnote: "수량과 사용자가 입력한 공사단가로 검토 후 금액 산출 가능한 항목",
       tone: "green"
     }
   ];

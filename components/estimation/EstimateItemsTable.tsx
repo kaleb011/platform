@@ -44,6 +44,17 @@ function getUnitLabel(item: EstimateItemRecord) {
 }
 
 function getSourceLabel(item: EstimateItemRecord) {
+  if (item.matchSource === "rebar") {
+    return [
+      "rebar_quantity",
+      "사용자 승인 후 반영",
+      "기본 수량: 정미중량 kg",
+      item.sourceNote ?? item.remark ?? null
+    ]
+      .filter(Boolean)
+      .join(" / ");
+  }
+
   if (item.matchSource === "uploaded_pdf" || item.matchSource === "manual") {
     return [
       item.matchSource === "manual" ? "manual_match" : "uploaded_pdf",
