@@ -88,7 +88,7 @@ function inferMemberType(memberName: string, source: string): RebarMemberType {
   if (basePlateMemberPattern.test(member)) return "unknown";
 
   if (/\bS-301\b/i.test(source) || /슬라브|슬래브|SLAB/i.test(source)) {
-    if (/^(?:\d{0,2}NS|S)\d/i.test(member)) return "slab";
+    if (/^(?:\d{0,2}NS|NMF|S)\d/i.test(member)) return "slab";
   }
 
   if (/\bS-302\b/i.test(source) || /보\s*일람표|BEAM/i.test(source)) {
@@ -117,8 +117,14 @@ function inferMemberType(memberName: string, source: string): RebarMemberType {
 function isDefaultScheduleMember(memberName: string, memberType: RebarMemberType, source: string) {
   const member = normalizeMemberName(memberName);
 
-  if (basePlateMemberPattern.test(member) || basePlateContextPattern.test(source)) return false;
-  if (deckSlabMemberPattern.test(member) || deckSlabContextPattern.test(source)) return false;
+  if (basePlateMemberPattern.test(member)) return false;
+  if (deckSlabMemberPattern.test(member)) return false;
+  if (memberType === "column" && basePlateContextPattern.test(source) && !/^NPC\d/i.test(member)) {
+    return false;
+  }
+  if (memberType === "slab" && deckSlabContextPattern.test(source) && !/^(?:\d{0,2}NS|NMF)\d/i.test(member)) {
+    return false;
+  }
   if (memberType === "wall" && !explicitWallSchedulePattern.test(source)) return false;
 
   return true;
@@ -127,8 +133,10 @@ function isDefaultScheduleMember(memberName: string, memberType: RebarMemberType
 function inferFutureReviewMemberType(memberName: string, source: string): RebarMemberType {
   const member = normalizeMemberName(memberName);
 
-  if (deckSlabMemberPattern.test(member) || deckSlabContextPattern.test(source)) return "slab";
-  if (basePlateMemberPattern.test(member) || basePlateContextPattern.test(source)) return "column";
+  if (deckSlabMemberPattern.test(member)) return "slab";
+  if (basePlateMemberPattern.test(member)) return "column";
+  if (deckSlabContextPattern.test(source) && !/^(?:\d{0,2}NS|NMF)\d/i.test(member)) return "slab";
+  if (basePlateContextPattern.test(source) && !/^NPC\d/i.test(member)) return "column";
 
   return inferMemberType(memberName, source);
 }
@@ -136,7 +144,7 @@ function inferFutureReviewMemberType(memberName: string, source: string): RebarM
 function getFutureReviewLabel(memberName: string, source: string) {
   const member = normalizeMemberName(memberName);
 
-  if (deckSlabMemberPattern.test(member) || deckSlabContextPattern.test(source)) {
+  if (deckSlabMemberPattern.test(member)) {
     return {
       label: "데크 슬라브 / 업체 구조계산 필요",
       basis:
@@ -144,7 +152,7 @@ function getFutureReviewLabel(memberName: string, source: string) {
     };
   }
 
-  if (basePlateMemberPattern.test(member) || basePlateContextPattern.test(source)) {
+  if (basePlateMemberPattern.test(member)) {
     return {
       label: "베이스플레이트 참고 항목 / 철골 수량산출 대상",
       basis:
