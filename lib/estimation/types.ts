@@ -94,6 +94,70 @@ export type RebarMemberListSource =
   | "future_review"
   | "manual";
 
+export interface RebarGeneralRuleSource {
+  drawingNo: string;
+  drawingTitle: string;
+  pageLabel: string;
+  note: string;
+}
+
+export interface RebarCoverRule {
+  id: string;
+  condition: string;
+  memberTypes: RebarMemberType[];
+  exposure:
+    | "earth_cast"
+    | "water_cast"
+    | "exterior_or_earth_exposed"
+    | "interior"
+    | "unknown";
+  diameterRange?: string;
+  coverMm: number;
+  source: RebarGeneralRuleSource;
+  reviewRequired?: boolean;
+}
+
+export interface RebarHookRule {
+  id: string;
+  barRole: "main" | "stirrup" | "tie" | "hoop" | "unknown";
+  diameter: string;
+  hookAngle: "90" | "135" | "180";
+  hookLengthMm: number | null;
+  basis: string;
+  source: RebarGeneralRuleSource;
+  reviewRequired?: boolean;
+}
+
+export interface RebarDevelopmentRule {
+  id: string;
+  concreteStrengthMpa: number;
+  steelYieldMpa: number;
+  diameter: string;
+  memberGroup: "foundation" | "beam_column" | "slab_wall" | "other";
+  barPosition: "top" | "general" | "compression" | "hooked_tension";
+  lengthType:
+    | "development"
+    | "lap_splice"
+    | "compression_development"
+    | "compression_splice"
+    | "hooked_development";
+  lengthMm: number | null;
+  source: RebarGeneralRuleSource;
+  reviewRequired?: boolean;
+}
+
+export interface RebarDetailAdjustmentPreset {
+  coverMm: number;
+  developmentLengthMm: number;
+  spliceLengthMm: number;
+  hookLengthMm: number;
+  deductionLengthMm: number;
+  bendingAdjustmentMm: number;
+  lossRate: number;
+  appliedRuleIds: string[];
+  warnings: string[];
+}
+
 export type DrawingDiscipline =
   | "architecture"
   | "structure"
@@ -374,6 +438,7 @@ export interface RebarQuantityCandidateRecord {
   anchorageLengthMm?: number;
   spliceLengthMm?: number;
   hookLengthMm?: number;
+  deductionLengthMm?: number;
   bendCorrectionMm?: number;
   lossRate?: number;
   faceCount?: number;
@@ -407,6 +472,9 @@ export interface RebarQuantityCandidateRecord {
   planReferencePages?: number[];
   memberListSource?: RebarMemberListSource;
   detectedSpecs?: string[];
+  appliedGeneralRuleIds?: string[];
+  generalRuleNotes?: string[];
+  generalRuleReviewRequired?: boolean;
 }
 
 export interface RebarPlanReferenceRecord {

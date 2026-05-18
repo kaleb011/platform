@@ -165,7 +165,12 @@ export function buildRebarReviewEvidenceNote(candidate: RebarQuantityCandidateRe
     isWallRebarDetailReviewRequired(candidate) ? "배근 상세 확인 필요" : null,
     candidate.memberType === "wall" ? "사용자 보정값 기반" : null,
     candidate.approvedReason ?? null,
-    candidate.reviewNote ? `검토메모: ${candidate.reviewNote}` : null
+    candidate.reviewNote ? `검토메모: ${candidate.reviewNote}` : null,
+    candidate.appliedGeneralRuleIds?.length
+      ? `구조일반사항 적용: ${candidate.appliedGeneralRuleIds.join(", ")}`
+      : null,
+    candidate.generalRuleReviewRequired ? "구조일반사항 표 확인 필요" : null,
+    candidate.generalRuleNotes?.length ? `구조일반사항 메모: ${candidate.generalRuleNotes.join(" / ")}` : null
   ];
 
   return notes.filter(Boolean).join(" / ");

@@ -23,6 +23,7 @@ import {
 } from "@/components/estimation/RebarReferenceGuide";
 import { RebarReviewHistoryNote } from "@/components/estimation/RebarReviewHistoryNote";
 import { RebarSourceEvidencePanel } from "@/components/estimation/RebarSourceEvidencePanel";
+import { RebarGeneralRulePanel } from "@/components/estimation/RebarGeneralRulePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -42,6 +43,7 @@ import {
 import type {
   DrawingSheetIndexRecord,
   RebarBarCountRule,
+  RebarDetailAdjustmentPreset,
   RebarFootingLayer,
   RebarMemberType,
   RebarPosition,
@@ -191,7 +193,7 @@ function getInputSourceLabel(field: string, memberType: RebarMemberType) {
     return "구조 일반사항 확인값";
   }
 
-  if (["lossRate", "bendCorrectionMm", "manualBarCount", "barCountRule"].includes(field)) {
+  if (["lossRate", "bendCorrectionMm", "deductionLengthMm", "manualBarCount", "barCountRule"].includes(field)) {
     return "사용자 판단값";
   }
 
@@ -984,6 +986,13 @@ function TemplateInputs({
           value={candidate.hookLengthMm}
         />
         <NumberInput
+          field="deductionLengthMm"
+          label="공제길이 mm"
+          memberType={candidate.memberType}
+          onChange={(value) => onChange({ deductionLengthMm: value })}
+          value={candidate.deductionLengthMm}
+        />
+        <NumberInput
           field="bendCorrectionMm"
           label="절곡보정 mm"
           memberType={candidate.memberType}
@@ -1058,6 +1067,47 @@ export function RebarQuantityReview({
   const handleAddCandidate = () => {
     const newId = onAddCandidate?.(activeType);
     if (typeof newId === "string") setSelectedId(newId);
+  };
+
+  const handleApplyGeneralRulePreset = (preset: RebarDetailAdjustmentPreset) => {
+    if (!selectedCandidate) return;
+
+    const hasExistingDetailValue = [
+      selectedCandidate.coverMm,
+      selectedCandidate.anchorageLengthMm,
+      selectedCandidate.spliceLengthMm,
+      selectedCandidate.hookLengthMm,
+      selectedCandidate.deductionLengthMm,
+      selectedCandidate.bendCorrectionMm,
+      selectedCandidate.lossRate
+    ].some((value) => typeof value === "number" && value > 0);
+
+    if (
+      hasExistingDetailValue &&
+      typeof window !== "undefined" &&
+      !window.confirm("기존 보정값을 구조일반사항 추천값으로 덮어쓸까요?")
+    ) {
+      return;
+    }
+
+    onChangeCandidate(selectedCandidate.id, {
+      coverMm: preset.coverMm,
+      anchorageLengthMm: preset.developmentLengthMm,
+      spliceLengthMm: preset.spliceLengthMm,
+      hookLengthMm: preset.hookLengthMm,
+      deductionLengthMm: preset.deductionLengthMm,
+      bendCorrectionMm: preset.bendingAdjustmentMm,
+      lossRate: preset.lossRate,
+      appliedGeneralRuleIds: preset.appliedRuleIds,
+      generalRuleNotes: [
+        "구조일반사항 S-002 피복/간격/표준갈고리 기준 추천값 적용",
+        "구조일반사항 S-004 B급 이음 원칙 참고",
+        "구조일반사항 S-005 정착/이음길이 표 참고",
+        "구조도면과 구조일반사항이 상충할 경우 구조도면 우선",
+        ...preset.warnings
+      ],
+      generalRuleReviewRequired: preset.warnings.length > 0
+    });
   };
 
   return (
@@ -1242,6 +1292,10 @@ export function RebarQuantityReview({
               <RebarSourceEvidencePanel
                 candidate={selectedCandidate}
                 drawingSheets={drawingSheets}
+              />
+              <RebarGeneralRulePanel
+                candidate={selectedCandidate}
+                onApplyPreset={handleApplyGeneralRulePreset}
               />
               <DrawingExtractedValues candidate={selectedCandidate} drawingSheets={drawingSheets} />
 

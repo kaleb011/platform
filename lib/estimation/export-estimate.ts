@@ -414,6 +414,10 @@ export function exportRebarQuantityCandidatesToExcel(
     "자재중량 ton",
     "산출식",
     "산출근거",
+    "구조일반사항 적용 여부",
+    "적용 구조일반사항 기준",
+    "구조일반사항 검토 필요",
+    "구조도면 우선 안내",
     "출처파일",
     "출처페이지",
     "참조도면",
@@ -464,6 +468,10 @@ export function exportRebarQuantityCandidatesToExcel(
           <td>${escapeHtml(candidate.quantityReviewRequired ? "검토 필요" : candidate.materialQuantityTon ?? "")}</td>
           <td>${escapeHtml(candidate.calculationFormula)}</td>
           <td>${escapeHtml(candidate.calculationBasis)}</td>
+          <td>${escapeHtml(candidate.appliedGeneralRuleIds?.length ? "Y" : "N")}</td>
+          <td>${escapeHtml(candidate.appliedGeneralRuleIds?.join(", ") ?? "")}</td>
+          <td>${escapeHtml(candidate.generalRuleReviewRequired ? "Y" : "N")}</td>
+          <td>${escapeHtml(candidate.appliedGeneralRuleIds?.length ? "구조도면과 구조일반사항이 상충할 경우 구조도면 우선" : "")}</td>
           <td>${escapeHtml(candidate.sourceFileName ?? "")}</td>
           <td>${escapeHtml(candidate.sourcePage ? `p.${candidate.sourcePage}` : "")}</td>
           <td>${escapeHtml(getReferenceDrawingLabel(candidate))}</td>
@@ -473,7 +481,7 @@ export function exportRebarQuantityCandidatesToExcel(
           <td>${escapeHtml(getReviewCompletenessLabel(completeness))}</td>
           <td>${escapeHtml(checklist.total > 0 ? `${checklist.completed}/${checklist.total} (${checklist.percent}%)` : "")}</td>
           <td>${escapeHtml(candidate.reviewNote ?? candidate.reviewerComment ?? "")}</td>
-          <td>${escapeHtml(candidate.reviewNote || candidate.manualBarCount || candidate.memberCount !== 1 ? "Y" : "N")}</td>
+          <td>${escapeHtml(candidate.reviewNote || candidate.manualBarCount || candidate.memberCount !== 1 || candidate.appliedGeneralRuleIds?.length ? "Y" : "N")}</td>
           <td>${escapeHtml(followUpRequired ? "Y" : "N")}</td>
           <td>${escapeHtml(candidate.reviewStatus)}</td>
           <td>${escapeHtml(buildRebarReviewEvidenceNote(candidate) || candidate.note || "")}</td>

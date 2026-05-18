@@ -27,6 +27,7 @@ const coverMm = 40;
 const defaultAnchorageLengthMm = 0;
 const defaultSpliceLengthMm = 0;
 const defaultHookLengthMm = 0;
+const defaultDeductionLengthMm = 0;
 const defaultBendCorrectionMm = 0;
 const defaultLossRate = 0.03;
 const defaultFaceCount = 1;
@@ -918,6 +919,21 @@ function getCountRulePreview(
   return `${rule === "ceil_plus_one" ? "ceil" : "floor"}(${ratioFormula}) + 1`;
 }
 
+function getGeneralRuleBasis(candidate: RebarQuantityCandidateRecord) {
+  const notes = candidate.generalRuleNotes?.filter(Boolean) ?? [];
+  const ruleIds = candidate.appliedGeneralRuleIds?.filter(Boolean) ?? [];
+
+  if (notes.length === 0 && ruleIds.length === 0) return "";
+
+  return [
+    "구조일반사항 기준 추천값 적용",
+    ruleIds.length > 0 ? `적용 기준: ${ruleIds.join(", ")}` : null,
+    notes.length > 0 ? notes.join(" / ") : null
+  ]
+    .filter(Boolean)
+    .join(" / ");
+}
+
 function buildQuantityResult(args: {
   base: RebarQuantityCandidateRecord;
   barCount: number;
@@ -941,7 +957,13 @@ function buildQuantityResult(args: {
     materialQuantityKg: roundQuantity(materialWeightKg, 2),
     materialQuantityTon: roundQuantity(materialWeightKg / 1000, 4),
     calculationFormula: `${args.formula} = 정미 ${roundQuantity(netWeightKg, 2)}kg / 자재 ${roundQuantity(materialWeightKg, 2)}kg`,
-    calculationBasis: `${args.basis} 정미중량은 철근 가공조립 적용중량으로, 자재중량은 LOSS율을 반영한 참고값입니다.`,
+    calculationBasis: [
+      args.basis,
+      "정미중량은 철근 가공조립 적용중량으로, 자재중량은 LOSS율을 반영한 참고값입니다.",
+      getGeneralRuleBasis(args.base)
+    ]
+      .filter(Boolean)
+      .join(" "),
     quantityReviewRequired: args.barCount <= 0 || args.singleBarLengthM <= 0 || netWeightKg <= 0,
     note: args.barCount <= 0 || args.singleBarLengthM <= 0 ? "산출 조건 확인 필요" : "실무식 템플릿 적용"
   };
@@ -1061,6 +1083,7 @@ export function recalculateRebarQuantityCandidate(
   const anchorage = nonNegativeOrDefault(candidate.anchorageLengthMm, defaultAnchorageLengthMm);
   const splice = nonNegativeOrDefault(candidate.spliceLengthMm, defaultSpliceLengthMm);
   const hook = nonNegativeOrDefault(candidate.hookLengthMm, defaultHookLengthMm);
+  const deduction = nonNegativeOrDefault(candidate.deductionLengthMm, defaultDeductionLengthMm);
   const bend = nonNegativeOrDefault(candidate.bendCorrectionMm, defaultBendCorrectionMm);
   const lossRate = nonNegativeOrDefault(candidate.lossRate, defaultLossRate);
   const faceCount = positiveOrDefault(candidate.faceCount, defaultFaceCount);
@@ -1073,6 +1096,7 @@ export function recalculateRebarQuantityCandidate(
     anchorageLengthMm: anchorage,
     spliceLengthMm: splice,
     hookLengthMm: hook,
+    deductionLengthMm: deduction,
     bendCorrectionMm: bend,
     lossRate,
     faceCount,
@@ -1091,7 +1115,12 @@ export function recalculateRebarQuantityCandidate(
     materialQuantityKg: 0,
     materialQuantityTon: 0,
     calculationFormula: formula,
-    calculationBasis: `${note} 피복, 정착, 이음, 갈고리, 절곡 보정값과 부재 치수를 확인해야 합니다.`,
+    calculationBasis: [
+      `${note} 피복, 정착, 이음, 갈고리, 공제, 절곡 보정값과 부재 치수를 확인해야 합니다.`,
+      getGeneralRuleBasis(base)
+    ]
+      .filter(Boolean)
+      .join(" "),
     quantityReviewRequired: true,
     note
   });
@@ -1121,7 +1150,7 @@ export function recalculateRebarQuantityCandidate(
     if (!candidate.spacingMm && manualBarCount > 0) {
       const singleBarLengthM = Math.max(
         0,
-        lengthDimension - 2 * cover + anchorage + splice + hook + bend
+        lengthDimension - 2 * cover + anchorage + splice + hook + bend - deduction
       ) / 1000;
       const layer = candidate.footingLayer === "bottom" ? "하부근" : "상부근";
 
@@ -1153,7 +1182,7 @@ export function recalculateRebarQuantityCandidate(
     );
     const singleBarLengthM = Math.max(
       0,
-      lengthDimension - 2 * cover + anchorage + splice + hook + bend
+      lengthDimension - 2 * cover + anchorage + splice + hook + bend - deduction
     ) / 1000;
     const countPreview = getCountRulePreview(
       `(${countDimension} - 2x${cover}) / ${candidate.spacingMm}`,
@@ -1200,7 +1229,8 @@ export function recalculateRebarQuantityCandidate(
         2 * (candidate.sectionWidthMm - 2 * cover) +
           2 * (candidate.sectionDepthMm - 2 * cover) +
           hook +
-          bend
+          bend -
+          deduction
       ) / 1000;
       const countPreview = getCountRulePreview(
         `${candidate.memberLengthMm} / ${candidate.spacingMm}`,
@@ -1222,7 +1252,7 @@ export function recalculateRebarQuantityCandidate(
     }
 
     const barCount = positiveOrDefault(candidate.barCount ?? manualBarCount, 0);
-    const singleBarLengthM = Math.max(0, candidate.memberLengthMm + anchorage + splice) / 1000;
+    const singleBarLengthM = Math.max(0, candidate.memberLengthMm + anchorage + splice - deduction) / 1000;
 
     return buildQuantityResult({
       base: { ...base, position: candidate.position === "unknown" ? "main" : candidate.position },
@@ -1257,7 +1287,8 @@ export function recalculateRebarQuantityCandidate(
         2 * (candidate.sectionWidthMm - 2 * cover) +
           2 * (candidate.sectionDepthMm - 2 * cover) +
           hook +
-          bend
+          bend -
+          deduction
       ) / 1000;
       const countPreview = getCountRulePreview(
         `${candidate.memberHeightMm} / ${candidate.spacingMm}`,
@@ -1279,7 +1310,7 @@ export function recalculateRebarQuantityCandidate(
     }
 
     const barCount = positiveOrDefault(candidate.barCount ?? manualBarCount, 0);
-    const singleBarLengthM = Math.max(0, candidate.memberHeightMm + anchorage + splice) / 1000;
+    const singleBarLengthM = Math.max(0, candidate.memberHeightMm + anchorage + splice - deduction) / 1000;
 
     return buildQuantityResult({
       base: { ...base, position: candidate.position === "unknown" ? "main" : candidate.position },
@@ -1327,7 +1358,7 @@ export function recalculateRebarQuantityCandidate(
     );
     const singleBarLengthM = Math.max(
       0,
-      lengthDimension - 2 * cover + anchorage + splice + hook + bend
+      lengthDimension - 2 * cover + anchorage + splice + hook + bend - deduction
     ) / 1000;
     const countPreview = getCountRulePreview(
       `(${countDimension} - 2x${cover}) / ${candidate.spacingMm}`,
@@ -1398,7 +1429,7 @@ export function recalculateRebarQuantityCandidate(
     );
     const singleBarLengthM = Math.max(
       0,
-      lengthDimension - 2 * cover + anchorage + splice + hook + bend
+      lengthDimension - 2 * cover + anchorage + splice + hook + bend - deduction
     ) / 1000;
     const countPreview = getCountRulePreview(
       `(${countDimension} - 2x${cover}) / ${candidate.spacingMm}`,
@@ -1593,6 +1624,12 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
           recalculated.sourcePage ? `출처페이지: PDF p.${recalculated.sourcePage}` : null,
           recalculated.approvedReason ?? "사용자 검토 후 승인",
           recalculated.reviewNote ? `검토메모: ${recalculated.reviewNote}` : null,
+          recalculated.appliedGeneralRuleIds?.length
+            ? `구조일반사항 적용: ${recalculated.appliedGeneralRuleIds.join(", ")}`
+            : null,
+          recalculated.generalRuleNotes?.length
+            ? `구조일반사항 메모: ${recalculated.generalRuleNotes.join(" / ")}`
+            : null,
           wallDetailNote
         ]
           .filter(Boolean)
@@ -1602,10 +1639,24 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
         drawingNo: recalculated.sourcePage ? `PDF p.${recalculated.sourcePage}` : "",
         drawingTitle: "구조일람표 기반 철근 수량 산출 후보",
         remark: hasCalculatedQuantity
-          ? ["rebar_quantity", "사용자 검토 후 승인", reviewCompletenessLabel, wallDetailNote]
+          ? [
+              "rebar_quantity",
+              "사용자 검토 후 승인",
+              reviewCompletenessLabel,
+              recalculated.appliedGeneralRuleIds?.length ? "구조일반사항 기준 적용" : null,
+              recalculated.generalRuleReviewRequired ? "구조일반사항 표 확인 필요" : null,
+              wallDetailNote
+            ]
               .filter(Boolean)
               .join(" / ")
-          : ["rebar_quantity", "수량 확인 필요", reviewCompletenessLabel, wallDetailNote]
+          : [
+              "rebar_quantity",
+              "수량 확인 필요",
+              reviewCompletenessLabel,
+              recalculated.appliedGeneralRuleIds?.length ? "구조일반사항 기준 적용" : null,
+              recalculated.generalRuleReviewRequired ? "구조일반사항 표 확인 필요" : null,
+              wallDetailNote
+            ]
               .filter(Boolean)
               .join(" / "),
         sourceCandidateId: recalculated.id,
