@@ -338,7 +338,10 @@ export function getRebarCandidateSourceGroup(
     "drawingNo" | "memberName" | "memberListSource" | "rebarSourceType" | "sourceTextSnippet"
   >
 ): RebarCandidateSourceGroup {
-  if (candidate.memberListSource === "note_reference") {
+  if (
+    candidate.memberListSource === "note_reference" ||
+    candidate.memberListSource === "future_review"
+  ) {
     return "note";
   }
 

@@ -23,6 +23,13 @@ const notePattern =
   /구조\s*일반사항|GENERAL NOTE|NOTE|정착|이음|갈고리|피복|SD400|SD500|fy|fck|표준갈고리|A급\s*이음|B급\s*이음|철근\s*순간격|설계기준강도/i;
 const memberNamePattern =
   /\b(?:\d{0,2}(?:NFG|NMF|NPC|NS|DS|RW|NF|FG|PC|G|B|C|F|W)[A-Z]?\d{1,3}[A-Z]?|[A-Z]{1,3}\d{1,3}[A-Z]?)\b/g;
+const basePlateContextPattern =
+  /BASE\s*PLATE|ANCHOR\s*BOLT|RIB\s*PLATE|PEDESTAL|베이스플레이트|철골/i;
+const basePlateMemberPattern = /^(?:NSC|BP)\d/i;
+const deckSlabContextPattern =
+  /DECK\s*SLAB|DECK\s*TYPE|DECK\s*PL|LATTICE|CAMBER|SUPPORT|NONE-1|NONE-2|데크\s*슬라브/i;
+const deckSlabMemberPattern = /^(?:DS|SD)\d/i;
+const explicitWallSchedulePattern = /WALL\s*SCHEDULE|WALL\s*REBAR|벽체\s*배근|벽체\s*일람/i;
 
 function normalizeText(value: string | undefined) {
   return (value ?? "").replace(/\s+/g, " ").trim();
@@ -78,8 +85,10 @@ function isPlanPage(text: string, sheet?: DrawingSheetIndexRecord) {
 function inferMemberType(memberName: string, source: string): RebarMemberType {
   const member = normalizeMemberName(memberName);
 
+  if (basePlateMemberPattern.test(member)) return "unknown";
+
   if (/\bS-301\b/i.test(source) || /슬라브|슬래브|SLAB/i.test(source)) {
-    if (/^(?:\d{0,2}NS|DS|S)\d/i.test(member)) return "slab";
+    if (/^(?:\d{0,2}NS|S)\d/i.test(member)) return "slab";
   }
 
   if (/\bS-302\b/i.test(source) || /보\s*일람표|BEAM/i.test(source)) {
@@ -87,7 +96,8 @@ function inferMemberType(memberName: string, source: string): RebarMemberType {
   }
 
   if (/\bS-302\b/i.test(source) || /기둥\s*일람표|COLUMN/i.test(source)) {
-    if (/(?:NPC|PC|C)\d/i.test(member)) return "column";
+    if (/^NPC\d/i.test(member)) return "column";
+    if (/^PC\d/i.test(member) && !basePlateContextPattern.test(source)) return "column";
   }
 
   if (/\bS-303\b/i.test(source) || /기초|베이스|FOOTING|BASE/i.test(source)) {
@@ -96,11 +106,53 @@ function inferMemberType(memberName: string, source: string): RebarMemberType {
 
   if (/^(?:RW|W)\d/i.test(member) || /벽체|WALL/i.test(source)) return "wall";
   if (/(?:NFG|FG|G|B)\d/i.test(member)) return "beam";
-  if (/(?:NPC|PC|C)\d/i.test(member)) return "column";
-  if (/^(?:\d{0,2}NS|DS|S)\d/i.test(member)) return "slab";
+  if (/^NPC\d/i.test(member)) return "column";
+  if (/^PC\d/i.test(member) && !basePlateContextPattern.test(source)) return "column";
+  if (/^(?:\d{0,2}NS|S)\d/i.test(member)) return "slab";
   if (/(?:NMF|NF|F)\d/i.test(member)) return "footing";
 
   return "unknown";
+}
+
+function isDefaultScheduleMember(memberName: string, memberType: RebarMemberType, source: string) {
+  const member = normalizeMemberName(memberName);
+
+  if (basePlateMemberPattern.test(member) || basePlateContextPattern.test(source)) return false;
+  if (deckSlabMemberPattern.test(member) || deckSlabContextPattern.test(source)) return false;
+  if (memberType === "wall" && !explicitWallSchedulePattern.test(source)) return false;
+
+  return true;
+}
+
+function inferFutureReviewMemberType(memberName: string, source: string): RebarMemberType {
+  const member = normalizeMemberName(memberName);
+
+  if (deckSlabMemberPattern.test(member) || deckSlabContextPattern.test(source)) return "slab";
+  if (basePlateMemberPattern.test(member) || basePlateContextPattern.test(source)) return "column";
+
+  return inferMemberType(memberName, source);
+}
+
+function getFutureReviewLabel(memberName: string, source: string) {
+  const member = normalizeMemberName(memberName);
+
+  if (deckSlabMemberPattern.test(member) || deckSlabContextPattern.test(source)) {
+    return {
+      label: "데크 슬라브 / 업체 구조계산 필요",
+      basis:
+        "데크 슬라브는 일반 철근콘크리트 슬라브와 산출 방식이 달라 업체 선정 후 구조계산 및 제조사 자료 확인이 필요합니다."
+    };
+  }
+
+  if (basePlateMemberPattern.test(member) || basePlateContextPattern.test(source)) {
+    return {
+      label: "베이스플레이트 참고 항목 / 철골 수량산출 대상",
+      basis:
+        "NSC/BP 계열은 철근콘크리트 기둥 일람표 후보가 아니라 베이스플레이트 또는 철골 관련 후속 검토 항목입니다."
+    };
+  }
+
+  return null;
 }
 
 function getContextWindow(lines: string[], index: number) {
@@ -178,6 +230,7 @@ export function extractRebarMemberScheduleFromPdfResults(
             const memberType = inferMemberType(memberName, source);
 
             if (memberType === "unknown") return;
+            if (!isDefaultScheduleMember(memberName, memberType, source)) return;
 
             const section = parseSectionSize(context);
             const spacingSpecs = detectedSpecs.filter((spec) => spec.includes("@"));
@@ -327,6 +380,125 @@ export function buildRebarQuantityCandidatesFromMemberSchedules(
       };
 
       return [recalculateRebarQuantityCandidate(candidate)];
+    });
+  });
+
+  return candidates;
+}
+
+export function buildFutureReviewRebarCandidatesFromPdfResults(
+  pdfResults: PdfTextExtractionResult[],
+  drawingIndexes: DrawingSheetIndexRecord[] = []
+): RebarQuantityCandidateRecord[] {
+  const seen = new Set<string>();
+  const candidates: RebarQuantityCandidateRecord[] = [];
+
+  pdfResults.forEach((result) => {
+    result.pages.forEach((page) => {
+      const sheet = findSheet(drawingIndexes, result.fileName, page.pageNumber);
+      const text = page.text ?? "";
+
+      if (!isSchedulePage(text, sheet)) return;
+
+      const lines = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      lines.forEach((line, index) => {
+        const context = getContextWindow(lines, index);
+        const detectedSpecs = getDetectedSpecs(context);
+
+        if (detectedSpecs.length === 0) return;
+
+        const memberNames = Array.from(context.matchAll(memberNamePattern))
+          .map((match) => normalizeMemberName(match[0]))
+          .filter((name) => !/^(?:D|HD|SD400|SD500|FCK|FY)\d/i.test(name));
+
+        memberNames.forEach((memberName) => {
+          const source = `${sheet?.drawingNo ?? ""} ${sheet?.drawingTitle ?? ""} ${context}`;
+          const futureReview = getFutureReviewLabel(memberName, source);
+
+          if (!futureReview) return;
+
+          const memberType = inferFutureReviewMemberType(memberName, source);
+          if (memberType === "unknown") return;
+
+          detectedSpecs.forEach((spec, specIndex) => {
+            const key = `${result.fileName}|${page.pageNumber}|${memberName}|${spec}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+
+            const countPattern = parseRebarCountPattern(spec)[0];
+            const spacingPattern = parseRebarSpacingPattern(spec)[0];
+            const diameter = normalizeRebarDiameter(
+              countPattern?.diameter ?? spacingPattern?.diameter ?? spec
+            );
+            const unitWeightKgPerM = diameter ? getRebarUnitWeight(diameter) : null;
+
+            if (!diameter || !unitWeightKgPerM) return;
+
+            const section = parseSectionSize(context);
+            const candidate: RebarQuantityCandidateRecord = {
+              id: `future-review-${createStableId([
+                result.fileName,
+                page.pageNumber,
+                memberName,
+                specIndex
+              ])}`,
+              sourceFileName: result.fileName,
+              sourcePage: page.pageNumber,
+              drawingNo: sheet?.drawingNo,
+              memberName,
+              memberType,
+              position: getPositionFromSpec(spec, memberType),
+              workCategory: "철근콘크리트공사",
+              itemName: "철근 가공 및 조립",
+              specification: [diameter, memberName, spec].join(" / "),
+              diameter,
+              unitWeightKgPerM,
+              barCount: countPattern?.count,
+              manualBarCount: countPattern?.count,
+              spacingMm: spacingPattern?.spacingMm,
+              sectionWidthMm: memberType === "column" ? section?.widthMm : undefined,
+              sectionDepthMm: memberType === "column" ? section?.depthMm : section?.depthMm,
+              slabThicknessMm: memberType === "slab" ? section?.depthMm : undefined,
+              coverMm: memberType === "slab" ? 30 : 40,
+              anchorageLengthMm: 0,
+              spliceLengthMm: 0,
+              hookLengthMm: 0,
+              bendCorrectionMm: 0,
+              lossRate: 0.03,
+              faceCount: 1,
+              barCountRule: "floor_plus_one",
+              footingLayer: "top",
+              memberCount: 1,
+              quantityKg: 0,
+              quantityTon: 0,
+              materialQuantityKg: 0,
+              materialQuantityTon: 0,
+              unit: "kg",
+              calculationFormula: "필수 입력값 부족",
+              calculationBasis: futureReview.basis,
+              confidence: sheet?.confidence ? Math.min(sheet.confidence, 0.5) : 0.4,
+              reviewStatus: "pending",
+              quantityReviewRequired: true,
+              note: futureReview.label,
+              rawText: spec,
+              sourceTextSnippet: context,
+              rebarSourceType: "structural_schedule",
+              scheduleSourcePage: page.pageNumber,
+              scheduleDrawingNo: sheet?.drawingNo,
+              scheduleDrawingTitle: sheet?.drawingTitle,
+              planMatched: false,
+              memberListSource: "future_review",
+              detectedSpecs
+            };
+
+            candidates.push(recalculateRebarQuantityCandidate(candidate));
+          });
+        });
+      });
     });
   });
 

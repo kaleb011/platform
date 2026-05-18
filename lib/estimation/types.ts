@@ -91,6 +91,7 @@ export type RebarMemberListSource =
   | "schedule_with_plan"
   | "plan_unmatched"
   | "note_reference"
+  | "future_review"
   | "manual";
 
 export type DrawingDiscipline =

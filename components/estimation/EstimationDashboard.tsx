@@ -52,6 +52,7 @@ import {
   recalculateRebarQuantityCandidate
 } from "@/lib/estimation/rebar-quantity";
 import {
+  buildFutureReviewRebarCandidatesFromPdfResults,
   buildPlanUnmatchedRebarCandidatesFromPdfResults,
   buildRebarQuantityCandidatesFromMemberSchedules,
   extractRebarMemberScheduleFromPdfResults
@@ -833,6 +834,10 @@ export function EstimationDashboard() {
           linkedDrawingIndexes,
           rebarMemberSchedules
         );
+        const futureReviewRebarCandidates = buildFutureReviewRebarCandidatesFromPdfResults(
+          [linkedResult],
+          linkedDrawingIndexes
+        );
 
         setPdfTextResults((current) => [
           linkedResult,
@@ -845,6 +850,7 @@ export function EstimationDashboard() {
         setRebarCandidates((current) => [
           ...nextRebarCandidates,
           ...unmatchedPlanRebarCandidates,
+          ...futureReviewRebarCandidates,
           ...current.filter((candidate) => candidate.sourceFileName !== linkedResult.fileName)
         ]);
         updateDrawingFileInActiveProject(record.id, {

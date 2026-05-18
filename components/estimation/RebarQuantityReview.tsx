@@ -175,6 +175,10 @@ function getSourceGroupLabel(candidate: RebarQuantityCandidateRecord) {
     return { label: "참고 문구 / 검토 필요", tone: "amber" as BadgeTone };
   }
 
+  if (candidate.memberListSource === "future_review") {
+    return { label: "후속 검토 대상", tone: "amber" as BadgeTone };
+  }
+
   const group = getRebarCandidateSourceGroup(candidate);
 
   if (group === "schedule") return { label: "구조일람표 기반 후보", tone: "green" as BadgeTone };
@@ -554,6 +558,9 @@ function CandidateList({
       candidate.memberListSource === "note_reference" ||
       (!candidate.memberListSource && getRebarCandidateSourceGroup(candidate) === "note")
   );
+  const futureReviewCandidates = candidates.filter(
+    (candidate) => candidate.memberListSource === "future_review"
+  );
 
   if (candidates.length === 0) {
     return (
@@ -614,6 +621,14 @@ function CandidateList({
         renderItem={renderCandidate}
         summaryLabel={`검토 필요 ${noteCandidates.length}개`}
         title="참고 문구 / 검토 필요"
+      />
+      <CollapsibleResultList
+        emptyMessage="후속 검토 대상 후보가 없습니다."
+        initialVisibleCount={0}
+        items={futureReviewCandidates}
+        renderItem={renderCandidate}
+        summaryLabel={`후속 검토 ${futureReviewCandidates.length}개`}
+        title="후속 검토 대상"
       />
     </div>
   );
@@ -1099,7 +1114,14 @@ export function RebarQuantityReview({
       <div className="mt-4 grid grid-cols-5 gap-2 rounded-[18px] bg-[#eef3ef] p-1.5">
         {memberTabs.map((tab) => {
           const active = activeType === tab.value;
-          const count = candidates.filter((candidate) => candidate.memberType === tab.value).length;
+          const count = candidates.filter(
+            (candidate) =>
+              candidate.memberType === tab.value &&
+              (candidate.memberListSource === "schedule" ||
+                candidate.memberListSource === "schedule_with_plan" ||
+                (!candidate.memberListSource &&
+                  getRebarCandidateSourceGroup(candidate) === "schedule"))
+          ).length;
 
           return (
             <button
@@ -1117,6 +1139,9 @@ export function RebarQuantityReview({
           );
         })}
       </div>
+      <p className="mt-2 text-[11px] leading-5 text-slate">
+        탭 숫자는 구조일람표 기반 기본 후보 수입니다. 평면도 감지 후보와 일반 노트 참고 문구, 후속 검토 대상은 접기 영역에서 확인합니다. 벽체 일람표가 없으면 벽체 기본 후보는 0개로 표시됩니다.
+      </p>
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
         <aside className="rounded-[18px] border border-border bg-[#f8fafc] p-3">

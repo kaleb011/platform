@@ -98,6 +98,7 @@ export function getSourceTypeLabel(candidate: RebarQuantityCandidateRecord) {
   if (candidate.memberListSource === "manual") return "사용자 직접 추가";
   if (candidate.memberListSource === "plan_unmatched") return "구조평면도";
   if (candidate.memberListSource === "note_reference") return "일반 노트";
+  if (candidate.memberListSource === "future_review") return "후속 검토 대상";
   if (candidate.memberListSource === "schedule" || candidate.memberListSource === "schedule_with_plan") {
     return "구조일람표";
   }
