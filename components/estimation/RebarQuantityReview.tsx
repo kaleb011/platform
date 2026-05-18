@@ -155,6 +155,26 @@ function sourceLabel(
 }
 
 function getSourceGroupLabel(candidate: RebarQuantityCandidateRecord) {
+  if (candidate.memberListSource === "manual") {
+    return { label: "사용자 직접 추가", tone: "gray" as BadgeTone };
+  }
+
+  if (candidate.memberListSource === "schedule_with_plan") {
+    return { label: "평면도 배치 확인", tone: "blue" as BadgeTone };
+  }
+
+  if (candidate.memberListSource === "schedule") {
+    return { label: "일람표 기반 후보", tone: "green" as BadgeTone };
+  }
+
+  if (candidate.memberListSource === "plan_unmatched") {
+    return { label: "일람표 매칭 필요", tone: "amber" as BadgeTone };
+  }
+
+  if (candidate.memberListSource === "note_reference") {
+    return { label: "참고 문구 / 검토 필요", tone: "amber" as BadgeTone };
+  }
+
   const group = getRebarCandidateSourceGroup(candidate);
 
   if (group === "schedule") return { label: "구조일람표 기반 후보", tone: "green" as BadgeTone };
@@ -483,6 +503,10 @@ function CandidateButton({
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         <Badge tone={sourceGroup.tone}>{sourceGroup.label}</Badge>
+        {candidate.detectedSpecs && candidate.detectedSpecs.length > 0 ? (
+          <Badge tone="blue">{candidate.detectedSpecs.slice(0, 3).join(", ")}</Badge>
+        ) : null}
+        {candidate.planMatched ? <Badge tone="blue">평면도 배치 확인됨</Badge> : null}
         <Badge tone="gray">{positionLabel[candidate.position]}</Badge>
         <Badge tone={completeness === "complete" ? "green" : checklistCompletion.completed > 0 ? "amber" : "gray"}>
           {getReviewCompletenessLabel(completeness)}
@@ -510,13 +534,25 @@ function CandidateList({
   selectedId?: string;
 }) {
   const scheduleCandidates = candidates.filter(
-    (candidate) => getRebarCandidateSourceGroup(candidate) === "schedule"
+    (candidate) =>
+      candidate.memberListSource === "schedule" ||
+      (!candidate.memberListSource && getRebarCandidateSourceGroup(candidate) === "schedule")
   );
-  const planCandidates = candidates.filter(
-    (candidate) => getRebarCandidateSourceGroup(candidate) === "plan"
+  const planMatchedCandidates = candidates.filter(
+    (candidate) => candidate.memberListSource === "schedule_with_plan"
+  );
+  const manualCandidates = candidates.filter(
+    (candidate) => candidate.memberListSource === "manual"
+  );
+  const planUnmatchedCandidates = candidates.filter(
+    (candidate) =>
+      candidate.memberListSource === "plan_unmatched" ||
+      (!candidate.memberListSource && getRebarCandidateSourceGroup(candidate) === "plan")
   );
   const noteCandidates = candidates.filter(
-    (candidate) => getRebarCandidateSourceGroup(candidate) === "note"
+    (candidate) =>
+      candidate.memberListSource === "note_reference" ||
+      (!candidate.memberListSource && getRebarCandidateSourceGroup(candidate) === "note")
   );
 
   if (candidates.length === 0) {
@@ -550,14 +586,30 @@ function CandidateList({
       <CollapsibleResultList
         emptyMessage="구조평면도 기반 보조 후보가 없습니다."
         initialVisibleCount={3}
-        items={planCandidates}
+        items={planMatchedCandidates}
         renderItem={renderCandidate}
-        summaryLabel={`보조 후보 ${planCandidates.length}개`}
-        title="구조평면도 기반 보조 후보"
+        summaryLabel={`평면도 배치 확인 ${planMatchedCandidates.length}개`}
+        title="평면도 배치 확인"
+      />
+      <CollapsibleResultList
+        emptyMessage="사용자 직접 추가 후보가 없습니다."
+        initialVisibleCount={5}
+        items={manualCandidates}
+        renderItem={renderCandidate}
+        summaryLabel={`사용자 직접 추가 ${manualCandidates.length}개`}
+        title="사용자 직접 추가"
+      />
+      <CollapsibleResultList
+        emptyMessage="일람표 매칭 필요 후보가 없습니다."
+        initialVisibleCount={0}
+        items={planUnmatchedCandidates}
+        renderItem={renderCandidate}
+        summaryLabel={`일람표 매칭 필요 ${planUnmatchedCandidates.length}개`}
+        title="일람표 매칭 필요"
       />
       <CollapsibleResultList
         emptyMessage="일반사항/노트 기반 참고 후보가 없습니다."
-        initialVisibleCount={3}
+        initialVisibleCount={0}
         items={noteCandidates}
         renderItem={renderCandidate}
         summaryLabel={`검토 필요 ${noteCandidates.length}개`}
@@ -1074,7 +1126,7 @@ export function RebarQuantityReview({
                 {memberTypeLabel[activeType]} 후보
               </h3>
               <p className="mt-1 text-[11px] leading-4 text-slate">
-                구조일람표 후보를 먼저 보고, 일반사항/노트 후보는 참고 문구로 검토하세요.
+                기본 후보는 구조일람표에서 확인된 부재명을 기준으로 생성됩니다. 구조평면도는 위치·반복 개수·축간 치수 확인용으로 연결되며, 일반 구조사항의 철근 문구는 참고 문구로 분리됩니다.
               </p>
             </div>
             <Button

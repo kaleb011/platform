@@ -47,12 +47,15 @@ import {
 } from "@/lib/estimation/export-estimate";
 import {
   applyRebarCandidateReviewStatus,
-  buildRebarQuantityCandidates,
   createEstimateItemsFromAcceptedRebarCandidates,
-  extractRebarSpecsFromPdfResults,
   getRebarUnitWeight,
   recalculateRebarQuantityCandidate
 } from "@/lib/estimation/rebar-quantity";
+import {
+  buildPlanUnmatchedRebarCandidatesFromPdfResults,
+  buildRebarQuantityCandidatesFromMemberSchedules,
+  extractRebarMemberScheduleFromPdfResults
+} from "@/lib/estimation/rebar-member-schedule";
 import {
   getDefaultReviewReason,
   resolveReviewCompleteness
@@ -684,7 +687,8 @@ export function EstimationDashboard() {
       confidence: 1,
       reviewStatus: "pending",
       quantityReviewRequired: true,
-      note: "직접 추가"
+      note: "사용자 직접 추가 부재",
+      memberListSource: "manual"
     };
 
     const nextCandidate = recalculateRebarQuantityCandidate(baseCandidate);
@@ -815,8 +819,20 @@ export function EstimationDashboard() {
           }))
         };
         const pdfCandidates = createCandidatesFromPdfText(linkedResult, record.id);
-        const rebarSpecs = extractRebarSpecsFromPdfResults([linkedResult]);
-        const nextRebarCandidates = buildRebarQuantityCandidates(rebarSpecs);
+        const linkedDrawingIndexes = extractDrawingSheetIndexesFromPdfResults([linkedResult]);
+        const rebarMemberSchedules = extractRebarMemberScheduleFromPdfResults(
+          [linkedResult],
+          linkedDrawingIndexes
+        );
+        const nextRebarCandidates = buildRebarQuantityCandidatesFromMemberSchedules(
+          rebarMemberSchedules,
+          linkedResult.fileName
+        );
+        const unmatchedPlanRebarCandidates = buildPlanUnmatchedRebarCandidatesFromPdfResults(
+          [linkedResult],
+          linkedDrawingIndexes,
+          rebarMemberSchedules
+        );
 
         setPdfTextResults((current) => [
           linkedResult,
@@ -828,6 +844,7 @@ export function EstimationDashboard() {
         ]);
         setRebarCandidates((current) => [
           ...nextRebarCandidates,
+          ...unmatchedPlanRebarCandidates,
           ...current.filter((candidate) => candidate.sourceFileName !== linkedResult.fileName)
         ]);
         updateDrawingFileInActiveProject(record.id, {

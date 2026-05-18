@@ -418,6 +418,8 @@ export function exportRebarQuantityCandidatesToExcel(
     "출처페이지",
     "참조도면",
     "출처유형",
+    "부재목록출처",
+    "감지철근스펙",
     "검토상태",
     "체크리스트 완료율",
     "검토메모",
@@ -466,6 +468,8 @@ export function exportRebarQuantityCandidatesToExcel(
           <td>${escapeHtml(candidate.sourcePage ? `p.${candidate.sourcePage}` : "")}</td>
           <td>${escapeHtml(getReferenceDrawingLabel(candidate))}</td>
           <td>${escapeHtml(getSourceTypeLabel(candidate))}</td>
+          <td>${escapeHtml(candidate.memberListSource ?? "")}</td>
+          <td>${escapeHtml(candidate.detectedSpecs?.join(", ") ?? "")}</td>
           <td>${escapeHtml(getReviewCompletenessLabel(completeness))}</td>
           <td>${escapeHtml(checklist.total > 0 ? `${checklist.completed}/${checklist.total} (${checklist.percent}%)` : "")}</td>
           <td>${escapeHtml(candidate.reviewNote ?? candidate.reviewerComment ?? "")}</td>

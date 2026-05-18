@@ -335,9 +335,25 @@ export type RebarCandidateSourceGroup = "schedule" | "plan" | "note";
 export function getRebarCandidateSourceGroup(
   candidate: Pick<
     RebarQuantityCandidateRecord,
-    "drawingNo" | "memberName" | "rebarSourceType" | "sourceTextSnippet"
+    "drawingNo" | "memberName" | "memberListSource" | "rebarSourceType" | "sourceTextSnippet"
   >
 ): RebarCandidateSourceGroup {
+  if (candidate.memberListSource === "note_reference") {
+    return "note";
+  }
+
+  if (candidate.memberListSource === "plan_unmatched") {
+    return "plan";
+  }
+
+  if (
+    candidate.memberListSource === "schedule" ||
+    candidate.memberListSource === "schedule_with_plan" ||
+    candidate.memberListSource === "manual"
+  ) {
+    return "schedule";
+  }
+
   const sourceText = [
     candidate.drawingNo,
     candidate.memberName,

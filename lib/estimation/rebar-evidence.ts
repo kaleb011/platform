@@ -95,6 +95,13 @@ export function getDefaultReviewReason(status: RebarReviewStatus) {
 }
 
 export function getSourceTypeLabel(candidate: RebarQuantityCandidateRecord) {
+  if (candidate.memberListSource === "manual") return "사용자 직접 추가";
+  if (candidate.memberListSource === "plan_unmatched") return "구조평면도";
+  if (candidate.memberListSource === "note_reference") return "일반 노트";
+  if (candidate.memberListSource === "schedule" || candidate.memberListSource === "schedule_with_plan") {
+    return "구조일람표";
+  }
+
   const group = getRebarCandidateSourceGroup(candidate);
 
   if (candidate.sourceFileName == null && candidate.sourcePage == null) return "사용자 직접 추가";

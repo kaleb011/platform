@@ -86,6 +86,13 @@ export type RebarSourceType =
   | "other_structure"
   | "unknown";
 
+export type RebarMemberListSource =
+  | "schedule"
+  | "schedule_with_plan"
+  | "plan_unmatched"
+  | "note_reference"
+  | "manual";
+
 export type DrawingDiscipline =
   | "architecture"
   | "structure"
@@ -335,6 +342,7 @@ export interface RebarSpecRecord {
 export interface RebarQuantityCandidateRecord {
   id: string;
   sourceRebarSpecId?: string;
+  scheduleMemberId?: string;
   sourcePage?: number;
   sourceFileName?: string;
   drawingNo?: string;
@@ -391,6 +399,42 @@ export interface RebarQuantityCandidateRecord {
   rawText?: string;
   sourceTextSnippet?: string;
   rebarSourceType?: RebarSourceType;
+  scheduleSourcePage?: number;
+  scheduleDrawingNo?: string;
+  scheduleDrawingTitle?: string;
+  planMatched?: boolean;
+  planReferencePages?: number[];
+  memberListSource?: RebarMemberListSource;
+  detectedSpecs?: string[];
+}
+
+export interface RebarPlanReferenceRecord {
+  drawingNo?: string;
+  drawingTitle?: string;
+  sourcePage?: number;
+  sourceTextSnippet?: string;
+}
+
+export interface RebarMemberScheduleRecord {
+  id: string;
+  memberName: string;
+  memberType: RebarMemberType;
+  drawingNo?: string;
+  drawingTitle?: string;
+  sourcePage?: number;
+  sourceType: "schedule" | "schedule_with_plan" | "plan_reference";
+  sectionName?: string;
+  detectedSpecs: string[];
+  sectionSize?: string;
+  widthMm?: number;
+  depthMm?: number;
+  thicknessMm?: number;
+  mainBars?: string[];
+  stirrups?: string[];
+  spacingSpecs?: string[];
+  sourceTextSnippet?: string;
+  confidence: number;
+  planReferences?: RebarPlanReferenceRecord[];
 }
 
 export interface RebarQuantitySummary {
