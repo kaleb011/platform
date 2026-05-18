@@ -14,11 +14,15 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { CollapsibleResultList } from "@/components/estimation/CollapsibleResultList";
+import { DrawingReferenceMatrix } from "@/components/estimation/DrawingReferenceMatrix";
+import { RebarApprovalChecklist } from "@/components/estimation/RebarApprovalChecklist";
 import { RebarInputSourceBadge } from "@/components/estimation/RebarInputSourceBadge";
 import {
   getRebarReferenceItems,
   RebarReferenceGuide
 } from "@/components/estimation/RebarReferenceGuide";
+import { RebarReviewHistoryNote } from "@/components/estimation/RebarReviewHistoryNote";
+import { RebarSourceEvidencePanel } from "@/components/estimation/RebarSourceEvidencePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -30,6 +34,11 @@ import {
   sortRebarQuantityCandidatesBySource,
   summarizeRebarQuantityCandidates
 } from "@/lib/estimation/rebar-quantity";
+import {
+  getChecklistCompletion,
+  getReviewCompletenessLabel,
+  resolveReviewCompleteness
+} from "@/lib/estimation/rebar-evidence";
 import type {
   DrawingSheetIndexRecord,
   RebarBarCountRule,
@@ -447,6 +456,8 @@ function CandidateButton({
 }) {
   const sourceGroup = getSourceGroupLabel(candidate);
   const wallReviewRequired = isWallRebarDetailReviewRequired(candidate);
+  const checklistCompletion = getChecklistCompletion(candidate);
+  const completeness = candidate.reviewCompleteness ?? resolveReviewCompleteness(candidate);
 
   return (
     <button
@@ -473,6 +484,9 @@ function CandidateButton({
       <div className="mt-2 flex flex-wrap gap-1.5">
         <Badge tone={sourceGroup.tone}>{sourceGroup.label}</Badge>
         <Badge tone="gray">{positionLabel[candidate.position]}</Badge>
+        <Badge tone={completeness === "complete" ? "green" : checklistCompletion.completed > 0 ? "amber" : "gray"}>
+          {getReviewCompletenessLabel(completeness)}
+        </Badge>
         {wallReviewRequired ? <Badge tone="amber">배근 상세 확인 필요</Badge> : null}
         {candidate.quantityReviewRequired ? (
           <Badge tone="amber">수량 확인 필요</Badge>
@@ -956,6 +970,12 @@ export function RebarQuantityReview({
   const wallDetailReviewRequired = selectedCandidate
     ? isWallRebarDetailReviewRequired(selectedCandidate)
     : false;
+  const selectedChecklistCompletion = selectedCandidate
+    ? getChecklistCompletion(selectedCandidate)
+    : { completed: 0, total: 0, percent: 0 };
+  const selectedReviewCompleteness = selectedCandidate
+    ? selectedCandidate.reviewCompleteness ?? resolveReviewCompleteness(selectedCandidate)
+    : "not_started";
 
   useEffect(() => {
     if (!selectedCandidate) {
@@ -1092,6 +1112,9 @@ export function RebarQuantityReview({
                     ) : (
                       <Badge tone="green">검토 후 산출 가능</Badge>
                     )}
+                    <Badge tone={selectedReviewCompleteness === "complete" ? "green" : selectedChecklistCompletion.completed > 0 ? "amber" : "gray"}>
+                      {getReviewCompletenessLabel(selectedReviewCompleteness)} · {selectedChecklistCompletion.percent}%
+                    </Badge>
                   </div>
                   <p className="mt-1 text-[12px] leading-5 text-slate">
                     {sourceLabel(selectedCandidate, drawingSheets)}
@@ -1137,7 +1160,12 @@ export function RebarQuantityReview({
               </div>
 
               <RelatedDrawingRecommendation memberType={selectedMemberType} />
+              <DrawingReferenceMatrix memberType={selectedMemberType} />
               <RebarReferenceGuide memberType={selectedMemberType} />
+              <RebarSourceEvidencePanel
+                candidate={selectedCandidate}
+                drawingSheets={drawingSheets}
+              />
               <DrawingExtractedValues candidate={selectedCandidate} drawingSheets={drawingSheets} />
 
               {wallDetailReviewRequired ? (
@@ -1153,6 +1181,16 @@ export function RebarQuantityReview({
                 activeType={selectedMemberType}
                 candidate={selectedCandidate}
                 missingRequiredLabels={missingRequiredLabels}
+                onChange={(updates) => onChangeCandidate(selectedCandidate.id, updates)}
+              />
+
+              <RebarApprovalChecklist
+                candidate={selectedCandidate}
+                onChange={(updates) => onChangeCandidate(selectedCandidate.id, updates)}
+              />
+
+              <RebarReviewHistoryNote
+                candidate={selectedCandidate}
                 onChange={(updates) => onChangeCandidate(selectedCandidate.id, updates)}
               />
 

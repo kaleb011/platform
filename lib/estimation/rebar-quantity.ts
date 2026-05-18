@@ -1523,6 +1523,28 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
         recalculated.quantityKg > 0 &&
         !recalculated.quantityReviewRequired;
       const quantityKg = hasCalculatedQuantity ? recalculated.quantityKg : 0;
+      const checklistValues = Object.values(recalculated.reviewChecklist ?? {});
+      const checklistTotal = checklistValues.length;
+      const checklistCompleted = checklistValues.filter(Boolean).length;
+      const reviewCompleteness =
+        recalculated.reviewCompleteness ??
+        (checklistTotal === 0
+          ? "not_started"
+          : checklistCompleted === checklistTotal
+            ? "complete"
+            : checklistCompleted > 0
+              ? "partial"
+              : "not_started");
+      const reviewCompletenessLabel =
+        reviewCompleteness === "complete"
+          ? "검토 완료"
+          : reviewCompleteness === "partial"
+            ? "일부 검토 미완료"
+            : "검토 전";
+      const checklistNote =
+        checklistTotal > 0 ? `체크리스트 ${checklistCompleted}/${checklistTotal}` : null;
+      const wallDetailNote =
+        recalculated.memberType === "wall" ? "배근 상세 확인 필요 / 사용자 보정값 기반" : null;
 
       return {
         id: `rebar-estimate-${candidate.id}`,
@@ -1546,7 +1568,13 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
           recalculated.calculationBasis,
           typeof recalculated.materialQuantityKg === "number"
             ? `자재중량(LOSS 포함): ${recalculated.materialQuantityKg}kg`
-            : null
+            : null,
+          reviewCompletenessLabel,
+          checklistNote,
+          recalculated.sourcePage ? `출처페이지: PDF p.${recalculated.sourcePage}` : null,
+          recalculated.approvedReason ?? "사용자 검토 후 승인",
+          recalculated.reviewNote ? `검토메모: ${recalculated.reviewNote}` : null,
+          wallDetailNote
         ]
           .filter(Boolean)
           .join(" / "),
@@ -1555,8 +1583,12 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
         drawingNo: recalculated.sourcePage ? `PDF p.${recalculated.sourcePage}` : "",
         drawingTitle: "구조일람표 기반 철근 수량 산출 후보",
         remark: hasCalculatedQuantity
-          ? "rebar_quantity / 사용자 검토 후 승인 / 철근 산출 후보 기반"
-          : "rebar_quantity / 사용자 검토 후 승인 / 수량 확인 필요",
+          ? ["rebar_quantity", "사용자 검토 후 승인", reviewCompletenessLabel, wallDetailNote]
+              .filter(Boolean)
+              .join(" / ")
+          : ["rebar_quantity", "수량 확인 필요", reviewCompletenessLabel, wallDetailNote]
+              .filter(Boolean)
+              .join(" / "),
         sourceCandidateId: recalculated.id,
         sourceFileName: recalculated.sourceFileName ?? null,
         sourcePage: recalculated.sourcePage ?? null,

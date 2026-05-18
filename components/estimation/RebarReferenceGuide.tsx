@@ -47,6 +47,7 @@ export function getRebarReferenceItems(memberType: RebarMemberType) {
 
 export function RebarReferenceGuide({ memberType }: { memberType: RebarMemberType }) {
   const [expanded, setExpanded] = useState(false);
+  const [followUpExpanded, setFollowUpExpanded] = useState(false);
   const items = getRebarReferenceItems(memberType);
 
   if (items.length === 0) {
@@ -70,13 +71,41 @@ export function RebarReferenceGuide({ memberType }: { memberType: RebarMemberTyp
         />
       </button>
       {expanded ? (
-        <ul className="grid gap-2 border-t border-border px-4 py-3 text-[12px] leading-5 text-slate">
-          {items.map((item) => (
-            <li key={`${item.title}-${item.detail}`}>
-              <span className="font-semibold text-foreground">{item.title}:</span> {item.detail}
-            </li>
-          ))}
-        </ul>
+        <div className="border-t border-border px-4 py-3">
+          <ul className="grid gap-2 text-[12px] leading-5 text-slate">
+            {items.map((item) => (
+              <li key={`${item.title}-${item.detail}`}>
+                <span className="font-semibold text-foreground">{item.title}:</span> {item.detail}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 rounded-[12px] border border-dashed border-border bg-white">
+            <button
+              aria-expanded={followUpExpanded}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[12px] font-bold text-foreground"
+              onClick={() => setFollowUpExpanded((current) => !current)}
+              type="button"
+            >
+              후속 개선 예정
+              <ChevronDown
+                className={[
+                  "h-3.5 w-3.5 text-slate transition",
+                  followUpExpanded ? "rotate-180" : ""
+                ].join(" ")}
+              />
+            </button>
+            {followUpExpanded ? (
+              <div className="border-t border-border px-3 py-2 text-[11px] leading-5 text-slate">
+                <p>
+                  현재는 PDF 텍스트 기반 후보와 사용자 검토를 중심으로 동작하며, 도면 이미지/표 구조/축간 치수 자동 해석은 후속 개선 범위입니다.
+                </p>
+                <p className="mt-1">
+                  PDF 페이지 이미지 미리보기 고도화, 구조일람표 행·열 자동 복원, 축간 치수 자동 연결, 반복 개수 자동 산정, OCR 및 이미지 도면 분석, Supabase 저장 및 검토 이력 관리는 이후 단계에서 다룹니다.
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </div>
       ) : null}
     </div>
   );

@@ -54,6 +54,10 @@ import {
   recalculateRebarQuantityCandidate
 } from "@/lib/estimation/rebar-quantity";
 import {
+  getDefaultReviewReason,
+  resolveReviewCompleteness
+} from "@/lib/estimation/rebar-evidence";
+import {
   createEstimationSampleData,
   createSampleProjectEstimateStates
 } from "@/lib/estimation/sample-data";
@@ -703,7 +707,15 @@ export function EstimationDashboard() {
     setRebarCandidates((current) =>
       current.map((candidate) =>
         candidate.id === candidateId
-          ? applyRebarCandidateReviewStatus(candidate, reviewStatus)
+          ? applyRebarCandidateReviewStatus(
+              {
+                ...candidate,
+                approvedReason: candidate.approvedReason ?? getDefaultReviewReason(reviewStatus),
+                reviewerComment: candidate.reviewerComment ?? candidate.reviewNote,
+                reviewCompleteness: resolveReviewCompleteness(candidate)
+              },
+              reviewStatus
+            )
           : candidate
       )
     );

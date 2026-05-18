@@ -9,6 +9,14 @@ import type {
   RebarStandardSummary,
   StatementReviewStatus
 } from "@/lib/estimation/types";
+import {
+  buildRebarReviewEvidenceNote,
+  getChecklistCompletion,
+  getReferenceDrawingLabel,
+  getReviewCompletenessLabel,
+  getSourceTypeLabel,
+  resolveReviewCompleteness
+} from "@/lib/estimation/rebar-evidence";
 
 function getExportQuantity(item: EstimateItemRecord): string | number {
   return item.quantityReviewRequired || item.quantity <= 0 ? "검토 필요" : item.quantity;
@@ -23,6 +31,18 @@ function getExportUnit(item: EstimateItemRecord): string {
 }
 
 function buildExportRemark(item: EstimateItemRecord): string {
+  if (item.matchSource === "rebar") {
+    return [
+      "rebar_quantity",
+      "기본 수량: 정미중량 kg",
+      item.sourceFileName ? `출처파일: ${item.sourceFileName}` : null,
+      item.sourcePage ? `PDF p.${item.sourcePage}` : null,
+      item.sourceNote ?? item.remark ?? null
+    ]
+      .filter(Boolean)
+      .join(" / ");
+  }
+
   if (item.matchSource === "uploaded_pdf" || item.matchSource === "manual") {
     const sourceLabel = item.matchSource === "manual" ? "manual_match" : "uploaded_pdf";
     const details = [
@@ -396,6 +416,13 @@ export function exportRebarQuantityCandidatesToExcel(
     "산출근거",
     "출처파일",
     "출처페이지",
+    "참조도면",
+    "출처유형",
+    "검토상태",
+    "체크리스트 완료율",
+    "검토메모",
+    "사용자 보정 여부",
+    "후속 확인 필요 여부",
     "검토상태",
     "비고"
   ];
@@ -414,6 +441,9 @@ export function exportRebarQuantityCandidatesToExcel(
       ]
         .filter(Boolean)
         .join(" / ");
+      const completeness = candidate.reviewCompleteness ?? resolveReviewCompleteness(candidate);
+      const checklist = getChecklistCompletion(candidate);
+      const followUpRequired = candidate.quantityReviewRequired || completeness !== "complete";
 
       return `
         <tr>
@@ -434,8 +464,15 @@ export function exportRebarQuantityCandidatesToExcel(
           <td>${escapeHtml(candidate.calculationBasis)}</td>
           <td>${escapeHtml(candidate.sourceFileName ?? "")}</td>
           <td>${escapeHtml(candidate.sourcePage ? `p.${candidate.sourcePage}` : "")}</td>
+          <td>${escapeHtml(getReferenceDrawingLabel(candidate))}</td>
+          <td>${escapeHtml(getSourceTypeLabel(candidate))}</td>
+          <td>${escapeHtml(getReviewCompletenessLabel(completeness))}</td>
+          <td>${escapeHtml(checklist.total > 0 ? `${checklist.completed}/${checklist.total} (${checklist.percent}%)` : "")}</td>
+          <td>${escapeHtml(candidate.reviewNote ?? candidate.reviewerComment ?? "")}</td>
+          <td>${escapeHtml(candidate.reviewNote || candidate.manualBarCount || candidate.memberCount !== 1 ? "Y" : "N")}</td>
+          <td>${escapeHtml(followUpRequired ? "Y" : "N")}</td>
           <td>${escapeHtml(candidate.reviewStatus)}</td>
-          <td>${escapeHtml(candidate.note ?? "")}</td>
+          <td>${escapeHtml(buildRebarReviewEvidenceNote(candidate) || candidate.note || "")}</td>
         </tr>
       `;
     })

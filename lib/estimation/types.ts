@@ -78,6 +78,8 @@ export type RebarBarCountRule = "floor_plus_one" | "ceil_plus_one" | "direct";
 
 export type RebarFootingLayer = "top" | "bottom";
 
+export type RebarReviewCompleteness = "complete" | "partial" | "not_started";
+
 export type RebarSourceType =
   | "structural_schedule"
   | "structural_plan"
@@ -380,6 +382,11 @@ export interface RebarQuantityCandidateRecord {
   confidence: number;
   reviewStatus: RebarReviewStatus;
   quantityReviewRequired: boolean;
+  reviewNote?: string;
+  approvedReason?: string;
+  reviewerComment?: string;
+  reviewChecklist?: Record<string, boolean>;
+  reviewCompleteness?: RebarReviewCompleteness;
   note?: string;
   rawText?: string;
   sourceTextSnippet?: string;
