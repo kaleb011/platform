@@ -926,7 +926,7 @@ function getGeneralRuleBasis(candidate: RebarQuantityCandidateRecord) {
   if (notes.length === 0 && ruleIds.length === 0) return "";
 
   return [
-    "구조일반사항 기준 추천값 적용",
+    "구조일반사항 추천값을 참고한 사용자 보정",
     ruleIds.length > 0 ? `적용 기준: ${ruleIds.join(", ")}` : null,
     notes.length > 0 ? notes.join(" / ") : null
   ]
@@ -952,6 +952,7 @@ function buildQuantityResult(args: {
   return {
     ...args.base,
     barCount: args.barCount,
+    singleBarLengthM: roundQuantity(args.singleBarLengthM, 3),
     quantityKg: roundQuantity(netWeightKg, 2),
     quantityTon: roundQuantity(netWeightKg / 1000, 4),
     materialQuantityKg: roundQuantity(materialWeightKg, 2),
@@ -1643,7 +1644,7 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
               "rebar_quantity",
               "사용자 검토 후 승인",
               reviewCompletenessLabel,
-              recalculated.appliedGeneralRuleIds?.length ? "구조일반사항 기준 적용" : null,
+              recalculated.appliedGeneralRuleIds?.length ? "구조일반사항 추천값 참고" : null,
               recalculated.generalRuleReviewRequired ? "구조일반사항 표 확인 필요" : null,
               wallDetailNote
             ]
@@ -1653,7 +1654,7 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
               "rebar_quantity",
               "수량 확인 필요",
               reviewCompletenessLabel,
-              recalculated.appliedGeneralRuleIds?.length ? "구조일반사항 기준 적용" : null,
+              recalculated.appliedGeneralRuleIds?.length ? "구조일반사항 추천값 참고" : null,
               recalculated.generalRuleReviewRequired ? "구조일반사항 표 확인 필요" : null,
               wallDetailNote
             ]

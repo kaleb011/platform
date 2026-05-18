@@ -446,6 +446,7 @@ export interface RebarQuantityCandidateRecord {
   manualBarCount?: number;
   footingLayer?: RebarFootingLayer;
   memberCount: number;
+  singleBarLengthM?: number;
   quantityKg: number;
   quantityTon: number;
   materialQuantityKg?: number;

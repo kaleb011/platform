@@ -37,14 +37,14 @@ export function RebarGeneralRulePanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h4 className="text-[13px] font-bold text-foreground">구조일반사항 기준 추천</h4>
+            <h4 className="text-[13px] font-bold text-foreground">고급 보정 참고 기준</h4>
             <Badge tone={preset.warnings.length > 0 ? "amber" : "blue"}>
               {preset.warnings.length > 0 ? "표 확인 필요" : "추천값"}
             </Badge>
           </div>
           <p className="mt-1 text-[11px] leading-5 text-slate">
-            피복, 정착, 이음, 후크 기본값을 구조일반사항 기준으로 추천합니다. 구조도면과
-            상충할 경우 구조도면을 우선합니다.
+            피복, 정착, 이음, 후크는 상세 보정 참고 기준입니다. 구조도면과 상충할 경우
+            구조도면을 우선하고, 사용자가 검토 후 적용합니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -54,7 +54,7 @@ export function RebarGeneralRulePanel({
             type="button"
             variant="secondary"
           >
-            구조일반사항 기준 적용
+            구조일반사항 추천값 적용
           </Button>
           <Button
             aria-expanded={expanded}

@@ -18,6 +18,16 @@ import {
   resolveReviewCompleteness
 } from "@/lib/estimation/rebar-evidence";
 
+function hasAdvancedRebarAdjustments(candidate: RebarQuantityCandidateRecord) {
+  return [
+    candidate.anchorageLengthMm,
+    candidate.spliceLengthMm,
+    candidate.hookLengthMm,
+    candidate.deductionLengthMm,
+    candidate.bendCorrectionMm
+  ].some((value) => typeof value === "number" && value > 0);
+}
+
 function getExportQuantity(item: EstimateItemRecord): string | number {
   return item.quantityReviewRequired || item.quantity <= 0 ? "검토 필요" : item.quantity;
 }
@@ -406,12 +416,16 @@ export function exportRebarQuantityCandidatesToExcel(
     "철근 개수",
     "간격",
     "단위중량",
+    "1본 길이 m",
     "길이/높이/기초치수",
     "반복개수",
+    "면수",
     "정미중량 kg",
     "정미중량 ton",
     "자재중량 kg",
     "자재중량 ton",
+    "LOSS율",
+    "고급 보정 적용 여부",
     "산출식",
     "산출근거",
     "구조일반사항 적용 여부",
@@ -450,6 +464,7 @@ export function exportRebarQuantityCandidatesToExcel(
       const completeness = candidate.reviewCompleteness ?? resolveReviewCompleteness(candidate);
       const checklist = getChecklistCompletion(candidate);
       const followUpRequired = candidate.quantityReviewRequired || completeness !== "complete";
+      const advancedApplied = hasAdvancedRebarAdjustments(candidate);
 
       return `
         <tr>
@@ -460,12 +475,16 @@ export function exportRebarQuantityCandidatesToExcel(
           <td>${escapeHtml(candidate.barCount ?? "")}</td>
           <td>${escapeHtml(candidate.spacingMm ? `@${candidate.spacingMm}` : "")}</td>
           <td>${escapeHtml(candidate.unitWeightKgPerM)}</td>
+          <td>${escapeHtml(candidate.singleBarLengthM ?? "")}</td>
           <td>${escapeHtml(sizeLabel)}</td>
           <td>${escapeHtml(candidate.memberCount)}</td>
+          <td>${escapeHtml(candidate.faceCount ?? 1)}</td>
           <td>${escapeHtml(candidate.quantityReviewRequired ? "검토 필요" : candidate.quantityKg)}</td>
           <td>${escapeHtml(candidate.quantityReviewRequired ? "검토 필요" : candidate.quantityTon)}</td>
           <td>${escapeHtml(candidate.quantityReviewRequired ? "검토 필요" : candidate.materialQuantityKg ?? "")}</td>
           <td>${escapeHtml(candidate.quantityReviewRequired ? "검토 필요" : candidate.materialQuantityTon ?? "")}</td>
+          <td>${escapeHtml(candidate.lossRate ?? "")}</td>
+          <td>${escapeHtml(advancedApplied ? "Y" : "N")}</td>
           <td>${escapeHtml(candidate.calculationFormula)}</td>
           <td>${escapeHtml(candidate.calculationBasis)}</td>
           <td>${escapeHtml(candidate.appliedGeneralRuleIds?.length ? "Y" : "N")}</td>
@@ -481,7 +500,7 @@ export function exportRebarQuantityCandidatesToExcel(
           <td>${escapeHtml(getReviewCompletenessLabel(completeness))}</td>
           <td>${escapeHtml(checklist.total > 0 ? `${checklist.completed}/${checklist.total} (${checklist.percent}%)` : "")}</td>
           <td>${escapeHtml(candidate.reviewNote ?? candidate.reviewerComment ?? "")}</td>
-          <td>${escapeHtml(candidate.reviewNote || candidate.manualBarCount || candidate.memberCount !== 1 || candidate.appliedGeneralRuleIds?.length ? "Y" : "N")}</td>
+          <td>${escapeHtml(candidate.reviewNote || candidate.manualBarCount || candidate.memberCount !== 1 || candidate.appliedGeneralRuleIds?.length || advancedApplied ? "Y" : "N")}</td>
           <td>${escapeHtml(followUpRequired ? "Y" : "N")}</td>
           <td>${escapeHtml(candidate.reviewStatus)}</td>
           <td>${escapeHtml(buildRebarReviewEvidenceNote(candidate) || candidate.note || "")}</td>

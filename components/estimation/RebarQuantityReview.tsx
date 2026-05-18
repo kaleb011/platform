@@ -133,6 +133,90 @@ function formatNumber(value: number | undefined, fractionDigits = 2) {
   });
 }
 
+function formatPercent(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "-";
+  }
+
+  return `${(value * 100).toLocaleString("ko-KR", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 0
+  })}%`;
+}
+
+function hasAdvancedAdjustments(candidate: RebarQuantityCandidateRecord) {
+  return [
+    candidate.anchorageLengthMm,
+    candidate.spliceLengthMm,
+    candidate.hookLengthMm,
+    candidate.deductionLengthMm,
+    candidate.bendCorrectionMm
+  ].some((value) => typeof value === "number" && value > 0);
+}
+
+function PracticalFormulaSummary({ candidate }: { candidate: RebarQuantityCandidateRecord }) {
+  const advancedApplied = hasAdvancedAdjustments(candidate);
+  const faceCount = candidate.faceCount ?? 1;
+  const lossRate = candidate.lossRate ?? 0;
+
+  return (
+    <section className="rounded-[14px] border border-[#d7e2d6] bg-[#f8fbf9] px-4 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h4 className="text-[13px] font-bold text-foreground">실무식 산출 미리보기</h4>
+          <p className="mt-1 text-[11px] leading-5 text-slate">
+            기본 산식은 1본 길이 x 본수 x 반복개수 x 면수 x 단위중량이며, LOSS율은
+            자재중량에만 반영합니다.
+          </p>
+        </div>
+        <Badge tone={advancedApplied ? "amber" : "gray"}>
+          {advancedApplied ? "고급 보정 적용" : "고급 보정 미적용"}
+        </Badge>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] md:grid-cols-3 xl:grid-cols-6">
+        <div className="rounded-[10px] bg-white px-3 py-2">
+          <p className="text-slate">1본 길이</p>
+          <p className="font-bold text-foreground">
+            {formatNumber(candidate.singleBarLengthM ?? 0)}m
+          </p>
+        </div>
+        <div className="rounded-[10px] bg-white px-3 py-2">
+          <p className="text-slate">본수</p>
+          <p className="font-bold text-foreground">{candidate.barCount ?? 0}본</p>
+        </div>
+        <div className="rounded-[10px] bg-white px-3 py-2">
+          <p className="text-slate">반복개수</p>
+          <p className="font-bold text-foreground">{candidate.memberCount ?? 1}회</p>
+        </div>
+        <div className="rounded-[10px] bg-white px-3 py-2">
+          <p className="text-slate">면수</p>
+          <p className="font-bold text-foreground">{faceCount}면</p>
+        </div>
+        <div className="rounded-[10px] bg-white px-3 py-2">
+          <p className="text-slate">단위중량</p>
+          <p className="font-bold text-foreground">
+            {formatNumber(candidate.unitWeightKgPerM)}kg/m
+          </p>
+        </div>
+        <div className="rounded-[10px] bg-white px-3 py-2">
+          <p className="text-slate">LOSS율</p>
+          <p className="font-bold text-foreground">{formatPercent(lossRate)}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-[12px] bg-white px-3 py-2 text-[11px] leading-5 text-slate">
+        <p className="font-semibold text-foreground">{candidate.calculationFormula}</p>
+        <p className="mt-1">
+          {advancedApplied
+            ? "1본 길이에 정착, 이음, 후크, 절곡, 공제 보정값이 반영되었습니다."
+            : "1본 길이는 기본길이 기준이며 고급 보정값은 0으로 처리했습니다."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function parseOptionalNumber(value: string): number | undefined {
   if (!value.trim()) return undefined;
   const parsed = Number(value);
@@ -649,6 +733,8 @@ function TemplateInputs({
 }) {
   const positionOptions = getPositionOptions(activeType);
   const missing = (label: string) => missingRequiredLabels.includes(label);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const advancedApplied = hasAdvancedAdjustments(candidate);
 
   return (
     <div className="grid gap-4">
@@ -964,6 +1050,32 @@ function TemplateInputs({
           required
           value={candidate.coverMm}
         />
+      </div>
+
+      <section className="rounded-[14px] border border-border bg-[#f8fafc] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[13px] font-bold text-foreground">고급 보정값</p>
+            <Badge tone={advancedApplied ? "amber" : "gray"}>
+              {advancedApplied ? "고급 보정 적용" : "고급 보정 미적용"}
+            </Badge>
+          </div>
+          <Button
+            aria-expanded={advancedOpen}
+            className="min-h-[32px] rounded-[12px] px-3 text-[12px]"
+            onClick={() => setAdvancedOpen((current) => !current)}
+            type="button"
+            variant="ghost"
+          >
+            {advancedOpen ? "고급 보정값 접기" : "고급 보정값 펼치기"}
+          </Button>
+        </div>
+        <p className="mt-1 text-[11px] leading-5 text-slate">
+          정착, 이음, 후크, 절곡, 공제는 기본 실무식의 필수값이 아니며 입력된 경우에만
+          1본 길이에 보정값으로 반영합니다.
+        </p>
+        {advancedOpen ? (
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <NumberInput
           field="anchorageLengthMm"
           label="정착길이 mm"
@@ -999,6 +1111,11 @@ function TemplateInputs({
           onChange={(value) => onChange({ bendCorrectionMm: value })}
           value={candidate.bendCorrectionMm}
         />
+          </div>
+        ) : null}
+      </section>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <NumberInput
           field="lossRate"
           label="LOSS율"
@@ -1114,7 +1231,7 @@ export function RebarQuantityReview({
     <Card className="section-enter bg-white shadow-sm">
       <SectionHeading
         title="철근 실무식 수량산출 후보"
-        description="도면 텍스트 기반 후보를 부재별로 검토하고, 사용자가 확인한 보정값으로 승인 후 적산내역과 품셈 산출에 반영합니다."
+        description="도면 텍스트와 구조일람표 기반 후보를 부재별로 검토하고, 사용자가 확인한 보정값으로 실무식 철근 물량을 산출합니다."
         action={
           onExportExcel ? (
             <Button
@@ -1124,7 +1241,7 @@ export function RebarQuantityReview({
               variant="secondary"
             >
               <FileSpreadsheet className="mr-1 h-4 w-4" />
-              철근 후보 Excel
+              철근 수량산출 후보 Excel
             </Button>
           ) : null
         }
@@ -1293,10 +1410,6 @@ export function RebarQuantityReview({
                 candidate={selectedCandidate}
                 drawingSheets={drawingSheets}
               />
-              <RebarGeneralRulePanel
-                candidate={selectedCandidate}
-                onApplyPreset={handleApplyGeneralRulePreset}
-              />
               <DrawingExtractedValues candidate={selectedCandidate} drawingSheets={drawingSheets} />
 
               {wallDetailReviewRequired ? (
@@ -1313,6 +1426,13 @@ export function RebarQuantityReview({
                 candidate={selectedCandidate}
                 missingRequiredLabels={missingRequiredLabels}
                 onChange={(updates) => onChangeCandidate(selectedCandidate.id, updates)}
+              />
+
+              <PracticalFormulaSummary candidate={selectedCandidate} />
+
+              <RebarGeneralRulePanel
+                candidate={selectedCandidate}
+                onApplyPreset={handleApplyGeneralRulePreset}
               />
 
               <RebarApprovalChecklist
