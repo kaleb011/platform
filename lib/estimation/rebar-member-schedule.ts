@@ -167,6 +167,10 @@ function getContextWindow(lines: string[], index: number) {
   return normalizeText(lines.slice(Math.max(0, index - 1), index + 2).join(" "));
 }
 
+function getScheduleContextWindow(lines: string[], index: number) {
+  return normalizeText(lines.slice(Math.max(0, index - 2), index + 4).join(" "));
+}
+
 function getDetectedSpecs(text: string) {
   const specs = new Set<string>();
 
@@ -224,7 +228,7 @@ export function extractRebarMemberScheduleFromPdfResults(
 
       if (isSchedulePage(text, sheet)) {
         lines.forEach((line, index) => {
-          const context = getContextWindow(lines, index);
+          const context = getScheduleContextWindow(lines, index);
           const detectedSpecs = getDetectedSpecs(context);
 
           if (detectedSpecs.length === 0) return;
@@ -234,7 +238,7 @@ export function extractRebarMemberScheduleFromPdfResults(
             .filter((name) => !/^(?:D|HD|SD|FCK|FY)\d/i.test(name));
 
           memberNames.forEach((memberName) => {
-            const source = `${sheet?.drawingNo ?? ""} ${sheet?.drawingTitle ?? ""} ${context}`;
+            const source = `${sheet?.drawingNo ?? ""} ${sheet?.drawingTitle ?? ""} ${text.slice(0, 1200)} ${context}`;
             const memberType = inferMemberType(memberName, source);
 
             if (memberType === "unknown") return;
@@ -414,7 +418,7 @@ export function buildFutureReviewRebarCandidatesFromPdfResults(
         .filter(Boolean);
 
       lines.forEach((line, index) => {
-        const context = getContextWindow(lines, index);
+        const context = getScheduleContextWindow(lines, index);
         const detectedSpecs = getDetectedSpecs(context);
 
         if (detectedSpecs.length === 0) return;
@@ -424,7 +428,7 @@ export function buildFutureReviewRebarCandidatesFromPdfResults(
           .filter((name) => !/^(?:D|HD|SD400|SD500|FCK|FY)\d/i.test(name));
 
         memberNames.forEach((memberName) => {
-          const source = `${sheet?.drawingNo ?? ""} ${sheet?.drawingTitle ?? ""} ${context}`;
+          const source = `${sheet?.drawingNo ?? ""} ${sheet?.drawingTitle ?? ""} ${text.slice(0, 1200)} ${context}`;
           const futureReview = getFutureReviewLabel(memberName, source);
 
           if (!futureReview) return;

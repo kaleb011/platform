@@ -160,7 +160,7 @@ function getSourceGroupLabel(candidate: RebarQuantityCandidateRecord) {
   }
 
   if (candidate.memberListSource === "schedule_with_plan") {
-    return { label: "평면도 배치 확인", tone: "blue" as BadgeTone };
+    return { label: "일람표 기반 후보", tone: "green" as BadgeTone };
   }
 
   if (candidate.memberListSource === "schedule") {
@@ -486,18 +486,18 @@ function CandidateButton({
   return (
     <button
       className={[
-        "rounded-[14px] border px-3 py-3 text-left transition",
+        "w-full min-w-0 overflow-hidden rounded-[14px] border px-3 py-3 text-left transition",
         selected ? "border-primary bg-primary/5" : "border-border bg-white hover:border-primary/40"
       ].join(" ")}
       onClick={() => onSelect(candidate.id)}
       type="button"
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-[13px] font-bold text-foreground">
+          <p className="break-words text-[13px] font-bold leading-5 text-foreground">
             {candidate.memberName ?? "부재명 미확인"} · {candidate.diameter}
           </p>
-          <p className="mt-1 truncate text-[11px] text-slate">
+          <p className="mt-1 break-words text-[11px] leading-4 text-slate">
             {sourceLabel(candidate, drawingSheets)}
           </p>
         </div>
@@ -505,7 +505,7 @@ function CandidateButton({
           {reviewLabelMap[candidate.reviewStatus]}
         </Badge>
       </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className="mt-2 flex min-w-0 max-w-full flex-wrap gap-1.5 [&>span]:max-w-full [&>span]:whitespace-normal [&>span]:break-words [&>span]:text-left">
         <Badge tone={sourceGroup.tone}>{sourceGroup.label}</Badge>
         {candidate.detectedSpecs && candidate.detectedSpecs.length > 0 ? (
           <Badge tone="blue">{candidate.detectedSpecs.slice(0, 3).join(", ")}</Badge>
@@ -540,11 +540,10 @@ function CandidateList({
   const scheduleCandidates = candidates.filter(
     (candidate) =>
       candidate.memberListSource === "schedule" ||
+      candidate.memberListSource === "schedule_with_plan" ||
       (!candidate.memberListSource && getRebarCandidateSourceGroup(candidate) === "schedule")
   );
-  const planMatchedCandidates = candidates.filter(
-    (candidate) => candidate.memberListSource === "schedule_with_plan"
-  );
+  const planMatchedCandidates: RebarQuantityCandidateRecord[] = [];
   const manualCandidates = candidates.filter(
     (candidate) => candidate.memberListSource === "manual"
   );
@@ -581,7 +580,7 @@ function CandidateList({
   );
 
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
       <CollapsibleResultList
         emptyMessage="구조일람표 기반 후보가 없습니다."
         initialVisibleCount={5}
@@ -593,6 +592,7 @@ function CandidateList({
       <CollapsibleResultList
         emptyMessage="구조평면도 기반 보조 후보가 없습니다."
         initialVisibleCount={3}
+        className="hidden"
         items={planMatchedCandidates}
         renderItem={renderCandidate}
         summaryLabel={`평면도 배치 확인 ${planMatchedCandidates.length}개`}
@@ -1143,9 +1143,9 @@ export function RebarQuantityReview({
         탭 숫자는 구조일람표 기반 기본 후보 수입니다. 평면도 감지 후보와 일반 노트 참고 문구, 후속 검토 대상은 접기 영역에서 확인합니다. 벽체 일람표가 없으면 벽체 기본 후보는 0개로 표시됩니다.
       </p>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <aside className="rounded-[18px] border border-border bg-[#f8fafc] p-3">
-          <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+        <aside className="min-w-0 overflow-hidden rounded-[18px] border border-border bg-[#f8fafc] p-3">
+          <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="text-[14px] font-bold text-foreground">
                 {memberTypeLabel[activeType]} 후보
@@ -1171,7 +1171,7 @@ export function RebarQuantityReview({
           />
         </aside>
 
-        <section className="rounded-[18px] border border-border bg-white p-4">
+        <section className="min-w-0 overflow-hidden rounded-[18px] border border-border bg-white p-4">
           {selectedCandidate ? (
             <div className="grid gap-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
