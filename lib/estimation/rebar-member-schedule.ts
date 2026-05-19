@@ -32,7 +32,7 @@ const deckSlabMemberPattern = /^(?:DS|SD)\d/i;
 const explicitWallSchedulePattern = /WALL\s*SCHEDULE|WALL\s*REBAR|벽체\s*배근|벽체\s*일람/i;
 
 const nonRcSectionTerminatorPattern =
-  /데크\s*슬라브|DECK\s*SLAB|DECK\s*PL|DECK\s*TYPE|LATTICE|CAMBER|SUPPORT|베이스\s*플레이트|베이스플레이트|BASE\s*PLATE|ANCHOR\s*BOLT|RIB\s*PLATE|COLUMN\s*SIZE|철골보|철골기둥|STEEL\s*BEAM|STEEL\s*COLUMN/i;
+  /데크\s*슬라브|DECK\s*SLAB|DECK\s*PL|DECK\s*TYPE|LATTICE|CAMBER|SUPPORT|베이스\s*플레이트|베이스플레이트|BASE\s*PLATE|ANCHOR\s*BOLT|RIB\s*PLATE|COLUMN\s*SIZE|\bBP\d*\b|\bNSC\d+\b|철골보|철골기둥|STEEL\s*BEAM|STEEL\s*COLUMN/i;
 
 type RebarScheduleScanState = "idle" | "rc_section_active" | "non_rc_section_active";
 
@@ -50,6 +50,19 @@ type RcScheduleSectionCandidate = {
   strength: "strong" | "weak";
 };
 
+export type RebarScheduleSectionDebug = {
+  normalizedTitleMatched: boolean;
+  matchedTitleText?: string;
+  headerTokensFound: string[];
+  headerTokenCount: number;
+  memberTokensFound: string[];
+  rebarPatternsFound: string[];
+  rejectedReason?: string;
+  startIndex?: number;
+  endIndex?: number;
+  previewText?: string;
+};
+
 export type RebarConcreteScheduleSection = {
   startLine: number;
   endLineExclusive: number;
@@ -60,7 +73,10 @@ export type RebarConcreteScheduleSection = {
   headerTokens: string[];
   confidence: number;
   sourceText: string;
+  debug: RebarScheduleSectionDebug;
 };
+
+let lastRebarScheduleSectionDebugLog: RebarScheduleSectionDebug[] = [];
 
 const rcScheduleTitleTypes: Array<{
   memberType: Exclude<RebarMemberType, "unknown">;
@@ -71,6 +87,32 @@ const rcScheduleTitleTypes: Array<{
   { memberType: "column", titlePattern: /기둥일람표/ },
   { memberType: "footing", titlePattern: /기초일람표/ },
   { memberType: "wall", titlePattern: /벽체일람표/ }
+];
+
+const flexibleRcScheduleTitleTypes: Array<{
+  memberType: Exclude<RebarMemberType, "unknown">;
+  titlePattern: RegExp;
+}> = [
+  {
+    memberType: "slab",
+    titlePattern: /철\s*근\s*콘\s*크\s*리\s*트\s*슬\s*(?:라|래)\s*브\s*일\s*람\s*표/i
+  },
+  {
+    memberType: "beam",
+    titlePattern: /철\s*근\s*콘\s*크\s*리\s*트\s*보\s*일\s*람\s*표/i
+  },
+  {
+    memberType: "column",
+    titlePattern: /철\s*근\s*콘\s*크\s*리\s*트\s*기\s*둥\s*일\s*람\s*표/i
+  },
+  {
+    memberType: "footing",
+    titlePattern: /철\s*근\s*콘\s*크\s*리\s*트\s*기\s*초\s*일\s*람\s*표/i
+  },
+  {
+    memberType: "wall",
+    titlePattern: /철\s*근\s*콘\s*크\s*리\s*트\s*벽\s*체\s*일\s*람\s*표/i
+  }
 ];
 
 const rcColumnHeaderPatterns: Array<{ label: string; pattern: RegExp; normalizedPattern?: RegExp }> = [
@@ -137,6 +179,18 @@ function getLineStartIndexes(lines: string[]) {
   return indexes;
 }
 
+function debugRebarScheduleSection(debug: RebarScheduleSectionDebug) {
+  lastRebarScheduleSectionDebugLog.push(debug);
+
+  if (typeof console !== "undefined" && typeof console.debug === "function") {
+    console.debug("[estimate:rebar-schedule-section]", debug);
+  }
+}
+
+export function getLastRebarScheduleSectionDebugLog() {
+  return lastRebarScheduleSectionDebugLog;
+}
+
 function getRcScheduleTitle(
   line: string,
   drawingNo?: string,
@@ -147,6 +201,16 @@ function getRcScheduleTitle(
   const hasStrongRcPrefix = normalizedLine.includes("철근콘크리트");
   const hasWeakRcContext =
     normalizedSheetContext.includes("철근콘크리트") || /\bS-30[1-3]\b/i.test(drawingNo ?? "");
+
+  for (const titleType of flexibleRcScheduleTitleTypes) {
+    if (titleType.titlePattern.test(line)) {
+      return {
+        memberType: titleType.memberType,
+        title: line,
+        strength: "strong"
+      };
+    }
+  }
 
   for (const titleType of rcScheduleTitleTypes) {
     if (!titleType.titlePattern.test(normalizedLine)) {
@@ -190,9 +254,18 @@ function getDetectedColumnHeaders(text: string) {
 }
 
 function hasScheduleMemberPattern(text: string) {
+  return getScheduleMemberTokens(text)
+    .some((name) => !/^(?:D|HD|SD400|SD500|FCK|FY)\d/i.test(name));
+}
+
+function getScheduleMemberTokens(text: string) {
   return Array.from(text.matchAll(memberNamePattern))
     .map((match) => normalizeMemberName(match[0]))
-    .some((name) => !/^(?:D|HD|SD400|SD500|FCK|FY)\d/i.test(name));
+    .filter((name) => !/^(?:D|HD|SD400|SD500|FCK|FY)\d/i.test(name));
+}
+
+function hasNpcMemberToken(text: string) {
+  return getScheduleMemberTokens(text).some((name) => /^NPC\d/i.test(name));
 }
 
 function hasRebarPattern(text: string) {
@@ -223,11 +296,37 @@ function buildScheduleSection(
   const sourceLines = lines.slice(active.startLine, Math.max(active.startLine + 1, endLineExclusive));
   const sourceText = normalizeText(sourceLines.join(" "));
   const headerTokens = getDetectedColumnHeaders(sourceText);
-  const hasMemberAndRebarPattern = hasScheduleMemberPattern(sourceText) && hasRebarPattern(sourceText);
+  const memberTokensFound = getScheduleMemberTokens(sourceText);
+  const rebarPatternsFound = getDetectedSpecs(sourceText);
+  const hasMemberAndRebarPattern = memberTokensFound.length > 0 && rebarPatternsFound.length > 0;
+  const hasColumnNpcFallback = active.memberType === "column" && hasNpcMemberToken(sourceText);
+  const accepted = headerTokens.length >= 2 || hasMemberAndRebarPattern || hasColumnNpcFallback;
+  const debug: RebarScheduleSectionDebug = {
+    normalizedTitleMatched: true,
+    matchedTitleText: active.title,
+    headerTokensFound: headerTokens,
+    headerTokenCount: headerTokens.length,
+    memberTokensFound,
+    rebarPatternsFound,
+    startIndex: active.startIndex,
+    endIndex,
+    previewText: sourceText.slice(0, 280)
+  };
 
-  if (headerTokens.length < 2 && !hasMemberAndRebarPattern) {
+  if (!accepted) {
+    debug.rejectedReason =
+      active.memberType === "column"
+        ? "column schedule title matched but header token count < 2 and NPC member was not found"
+        : "schedule title matched but header token count < 2 and member/rebar pattern was not found";
+    debugRebarScheduleSection(debug);
     return null;
   }
+
+  if (active.memberType === "column" && headerTokens.length < 2 && hasColumnNpcFallback) {
+    debug.rejectedReason = "column schedule title matched and NPC member found";
+  }
+
+  debugRebarScheduleSection(debug);
 
   return {
     startLine: active.startLine,
@@ -243,7 +342,8 @@ function buildScheduleSection(
       hasMemberAndRebarPattern,
       sheetConfidence
     }),
-    sourceText
+    sourceText,
+    debug
   };
 }
 
@@ -253,6 +353,7 @@ export function detectRebarConcreteScheduleSections(
   drawingTitle?: string,
   sheetConfidence?: number
 ): RebarConcreteScheduleSection[] {
+  lastRebarScheduleSectionDebugLog = [];
   const lines = pageText.split(/\r?\n/).map((line) => line.trim());
   const lineStartIndexes = getLineStartIndexes(lines);
   const sections: RebarConcreteScheduleSection[] = [];
@@ -280,7 +381,8 @@ export function detectRebarConcreteScheduleSections(
   };
 
   lines.forEach((line, index) => {
-    const title = getRcScheduleTitle(line, drawingNo, drawingTitle);
+    const titleText = lines.slice(index, Math.min(lines.length, index + 3)).join(" ");
+    const title = getRcScheduleTitle(titleText, drawingNo, drawingTitle);
     const lineStartIndex = lineStartIndexes[index] ?? 0;
 
     if (title) {
@@ -301,6 +403,28 @@ export function detectRebarConcreteScheduleSections(
 
     if (nonRcSectionTerminatorPattern.test(line)) {
       if (state === "rc_section_active") {
+        const activeTextBeforeLine = activeSection
+          ? lines.slice(activeSection.startLine, index).join(" ")
+          : "";
+        const shouldKeepColumnOpen =
+          activeSection?.memberType === "column" && !hasNpcMemberToken(activeTextBeforeLine);
+
+        if (shouldKeepColumnOpen) {
+          return;
+        }
+
+        debugRebarScheduleSection({
+          normalizedTitleMatched: true,
+          matchedTitleText: activeSection?.title,
+          headerTokensFound: [],
+          headerTokenCount: 0,
+          memberTokensFound: [],
+          rebarPatternsFound: [],
+          rejectedReason: `${activeSection?.memberType ?? "RC"} schedule closed by ${line} keyword`,
+          startIndex: activeSection?.startIndex,
+          endIndex: lineStartIndex,
+          previewText: line
+        });
         closeActiveSection(index, lineStartIndex);
       }
 
@@ -467,13 +591,57 @@ function getScheduleContextWindow(lines: string[], index: number) {
   return normalizeText(lines.slice(Math.max(0, index - 2), index + 4).join(" "));
 }
 
+function getInferredCountSpecs(text: string) {
+  const specs = new Set<string>();
+
+  Array.from(text.matchAll(/\b(\d{1,3})\s*[- ]\s*(10|13|16|19|22|25|29|32)\b/gi)).forEach(
+    (match) => {
+      specs.add(`${match[1]}-D${match[2]}`);
+    }
+  );
+
+  return Array.from(specs);
+}
+
+function getInferredSpacingSpecs(text: string) {
+  const specs = new Set<string>();
+
+  Array.from(text.matchAll(/\b(?:HD|D)\s*(10|13|16|19|22|25|29|32)\s*(\d{2,4})\b/gi)).forEach(
+    (match) => {
+      const spacing = Number(match[2]);
+
+      if (spacing >= 50 && spacing <= 600) {
+        specs.add(`D${match[1]}@${spacing}`);
+      }
+    }
+  );
+
+  return Array.from(specs);
+}
+
 function getDetectedSpecs(text: string) {
   const specs = new Set<string>();
 
   parseRebarCountPattern(text).forEach((pattern) => specs.add(pattern.rawText.replace(/\s+/g, "")));
   parseRebarSpacingPattern(text).forEach((pattern) => specs.add(pattern.rawText.replace(/\s+/g, "")));
+  getInferredCountSpecs(text).forEach((spec) => specs.add(spec));
+  getInferredSpacingSpecs(text).forEach((spec) => specs.add(spec));
 
   return Array.from(specs);
+}
+
+function parseScheduleSectionSize(text: string) {
+  const parsed = parseSectionSize(text);
+
+  if (parsed) {
+    return parsed;
+  }
+
+  const looseMatch = text.match(/\b([2-9]\d{2,4})\s+(?:[xX]\s*)?([2-9]\d{2,4})\b/);
+
+  return looseMatch
+    ? { widthMm: Number(looseMatch[1]), depthMm: Number(looseMatch[2]) }
+    : null;
 }
 
 function getPositionFromSpec(spec: string, memberType: RebarMemberType): RebarPosition {
@@ -484,6 +652,22 @@ function getPositionFromSpec(spec: string, memberType: RebarMemberType): RebarPo
   if (memberType === "wall") return "vertical";
 
   return "main";
+}
+
+function isInferredRebarSpec(spec: string, sourceText: string | undefined) {
+  const source = sourceText ?? "";
+  const countMatch = spec.match(/^(\d{1,3})-D(10|13|16|19|22|25|29|32)$/i);
+  const spacingMatch = spec.match(/^D(10|13|16|19|22|25|29|32)@(\d{2,4})$/i);
+
+  if (countMatch) {
+    return new RegExp(`\\b${countMatch[1]}\\s*[- ]\\s*${countMatch[2]}\\b`, "i").test(source);
+  }
+
+  if (spacingMatch) {
+    return new RegExp(`\\b(?:HD|D)\\s*${spacingMatch[1]}\\s*${spacingMatch[2]}\\b`, "i").test(source);
+  }
+
+  return false;
 }
 
 function mergeScheduleRecord(
@@ -557,7 +741,7 @@ export function extractRebarMemberScheduleFromPdfResults(
               if (memberType === "unknown") return;
               if (!isDefaultScheduleMember(memberName, memberType, source)) return;
 
-              const section = parseSectionSize(context);
+              const section = parseScheduleSectionSize(context);
               const spacingSpecs = detectedSpecs.filter((spec) => spec.includes("@"));
               const countSpecs = detectedSpecs.filter((spec) => !spec.includes("@"));
               const record: RebarMemberScheduleRecord = {
@@ -644,6 +828,8 @@ export function buildRebarQuantityCandidatesFromMemberSchedules(
       if (!diameter || !unitWeightKgPerM) return [];
 
       const position = getPositionFromSpec(spec, schedule.memberType);
+      const inferredSpec = isInferredRebarSpec(spec, schedule.sourceTextSnippet);
+      const inferenceNote = inferredSpec ? "철근 표기 추정 검토 필요" : null;
       const candidate: RebarQuantityCandidateRecord = {
         id: `${schedule.id}-${index}`,
         scheduleMemberId: schedule.id,
@@ -689,7 +875,8 @@ export function buildRebarQuantityCandidatesFromMemberSchedules(
         confidence: schedule.confidence,
         reviewStatus: "pending",
         quantityReviewRequired: true,
-        note: "구조일람표 기반 후보",
+        reviewNote: inferenceNote ?? undefined,
+        note: inferenceNote ?? "구조일람표 기반 후보",
         rawText: spec,
         sourceTextSnippet: schedule.sourceTextSnippet,
         rebarSourceType: "structural_schedule",
