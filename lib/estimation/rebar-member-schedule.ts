@@ -591,6 +591,21 @@ function getScheduleContextWindow(lines: string[], index: number) {
   return normalizeText(lines.slice(Math.max(0, index - 2), index + 4).join(" "));
 }
 
+function getMemberNamesFromText(text: string) {
+  return Array.from(text.matchAll(memberNamePattern))
+    .map((match) => normalizeMemberName(match[0]))
+    .filter((name) => !/^(?:D|HD|SD|FCK|FY)\d/i.test(name));
+}
+
+function getSectionMemberNames(
+  text: string,
+  sectionType: RebarConcreteScheduleSection["memberType"]
+) {
+  return getMemberNamesFromText(text).filter(
+    (memberName) => inferMemberTypeForSection(memberName, sectionType) !== "unknown"
+  );
+}
+
 function getInferredCountSpecs(text: string) {
   const specs = new Set<string>();
 
@@ -720,18 +735,24 @@ export function extractRebarMemberScheduleFromPdfResults(
             scheduleSection.startLine,
             scheduleSection.endLineExclusive
           ).filter(Boolean);
+          let activeMemberNames: string[] = [];
 
           sectionLines.forEach((line, index) => {
             const context = getScheduleContextWindow(sectionLines, index);
+            const lineMemberNames = getSectionMemberNames(line, scheduleSection.memberType);
+
+            if (lineMemberNames.length > 0) {
+              activeMemberNames = lineMemberNames;
+            }
+
             const detectedSpecs = getDetectedSpecs(context);
 
             if (detectedSpecs.length === 0) return;
 
-            const memberNames = Array.from(context.matchAll(memberNamePattern))
-              .map((match) => normalizeMemberName(match[0]))
-              .filter((name) => !/^(?:D|HD|SD|FCK|FY)\d/i.test(name));
+            const memberNames = getSectionMemberNames(context, scheduleSection.memberType);
+            const targetMemberNames = memberNames.length > 0 ? memberNames : activeMemberNames;
 
-            memberNames.forEach((memberName) => {
+            targetMemberNames.forEach((memberName) => {
               const source = `${sheet?.drawingNo ?? ""} ${sheet?.drawingTitle ?? ""} ${scheduleSection.title} ${scheduleSection.sourceText} ${context}`;
               const memberType = inferMemberTypeForSection(
                 memberName,
