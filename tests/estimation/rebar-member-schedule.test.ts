@@ -40,6 +40,10 @@ function hasCandidate(
   );
 }
 
+function countByMemberType(candidates: ReturnType<typeof parseCandidates>, memberType: RebarMemberType) {
+  return candidates.filter((candidate) => candidate.memberType === memberType).length;
+}
+
 describe("rebar member schedule parsing", () => {
   it("creates column candidates from a vertical column schedule", () => {
     const candidates = parseCandidates("column-vertical-schedule.txt");
@@ -80,5 +84,38 @@ describe("rebar member schedule parsing", () => {
     const candidates = parseCandidates("wall-plan-no-schedule.txt", "structural_plan");
 
     expect(candidates.filter((candidate) => candidate.memberType === "wall")).toHaveLength(0);
+  });
+
+  it("keeps foundation candidates when baseplate text appears on the same page", () => {
+    const candidates = parseCandidates("foundation-count-with-baseplate.txt");
+
+    expect(countByMemberType(candidates, "footing")).toBeGreaterThanOrEqual(2);
+    expect(candidates.some((candidate) => /^(?:BP|NSC)/.test(candidate.memberName))).toBe(false);
+  });
+
+  it("keeps slab candidates when deck slab text appears on the same page", () => {
+    const candidates = parseCandidates("slab-count-with-deck.txt");
+
+    expect(countByMemberType(candidates, "slab")).toBeGreaterThanOrEqual(2);
+    expect(
+      candidates.some((candidate) => /^(?:DS|SD)/.test(candidate.memberName) && candidate.memberType === "slab")
+    ).toBe(false);
+  });
+
+  it("continues scanning RC schedules after a deck slab block", () => {
+    const candidates = parseCandidates("deck-then-foundation-schedule.txt");
+
+    expect(hasCandidate(candidates, "1NS1", "D13", "slab")).toBe(true);
+    expect(hasCandidate(candidates, "NF1", "D19", "footing")).toBe(true);
+  });
+
+  it("keeps UI tab-like candidate counts for default RC schedule members", () => {
+    const candidates = parseCandidates("ui-tab-count-like-schedule.txt");
+
+    expect(countByMemberType(candidates, "footing")).toBeGreaterThan(0);
+    expect(countByMemberType(candidates, "slab")).toBeGreaterThan(0);
+    expect(countByMemberType(candidates, "beam")).toBeGreaterThan(0);
+    expect(countByMemberType(candidates, "column")).toBeGreaterThan(0);
+    expect(countByMemberType(candidates, "wall")).toBe(0);
   });
 });

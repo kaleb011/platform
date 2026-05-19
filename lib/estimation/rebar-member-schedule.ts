@@ -209,7 +209,10 @@ function getRcScheduleTitle(
   drawingNo?: string,
   drawingTitle?: string
 ): RcScheduleSectionTitle | null {
-  if (koreanNonRcSectionTerminatorPattern.test(line)) {
+  const koreanRcTitleIndex = line.search(/철근\s*콘크리트\s*(?:슬라브|슬래브|보|기둥|기초|벽체)\s*일람표/i);
+  const koreanNonRcIndex = line.search(koreanNonRcSectionTerminatorPattern);
+
+  if (koreanNonRcIndex >= 0 && (koreanRcTitleIndex < 0 || koreanNonRcIndex < koreanRcTitleIndex)) {
     return null;
   }
 
@@ -306,7 +309,7 @@ function hasNpcMemberToken(text: string) {
 }
 
 function hasRcScheduleTitleLead(text: string) {
-  return /철근|콘크리트|구조|일람표|STRUCTURAL|BEAM|COLUMN|FOOTING|SLAB|WALL/i.test(text);
+  return /철근|콘크리트|구조|일람표|슬라브|슬래브|기초|기둥|벽체|STRUCTURAL|BEAM|COLUMN|FOOTING|SLAB|WALL/i.test(text);
 }
 
 function hasRebarPattern(text: string) {
@@ -422,11 +425,10 @@ export function detectRebarConcreteScheduleSections(
   };
 
   lines.forEach((line, index) => {
-    const titleText = lines.slice(index, Math.min(lines.length, index + 3)).join(" ");
-    const title =
-      state === "non_rc_section_active" && !hasRcScheduleTitleLead(line)
-        ? null
-        : getRcScheduleTitle(titleText, drawingNo, drawingTitle);
+    const titleText = hasRcScheduleTitleLead(line)
+      ? lines.slice(index, Math.min(lines.length, index + 3)).join(" ")
+      : line;
+    const title = getRcScheduleTitle(titleText, drawingNo, drawingTitle);
     const lineStartIndex = lineStartIndexes[index] ?? 0;
 
     if (title) {
