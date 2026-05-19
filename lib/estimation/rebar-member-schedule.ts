@@ -31,12 +31,288 @@ const deckSlabContextPattern =
 const deckSlabMemberPattern = /^(?:DS|SD)\d/i;
 const explicitWallSchedulePattern = /WALL\s*SCHEDULE|WALL\s*REBAR|벽체\s*배근|벽체\s*일람/i;
 
+const nonRcSectionTerminatorPattern =
+  /데크\s*슬라브|DECK\s*SLAB|DECK\s*PL|DECK\s*TYPE|LATTICE|CAMBER|SUPPORT|베이스\s*플레이트|베이스플레이트|BASE\s*PLATE|ANCHOR\s*BOLT|RIB\s*PLATE|COLUMN\s*SIZE|철골보|철골기둥|STEEL\s*BEAM|STEEL\s*COLUMN/i;
+
+type RebarScheduleScanState = "idle" | "rc_section_active" | "non_rc_section_active";
+
+type RcScheduleSectionTitle = {
+  memberType: Exclude<RebarMemberType, "unknown">;
+  title: string;
+  strength: "strong" | "weak";
+};
+
+type RcScheduleSectionCandidate = {
+  startLine: number;
+  startIndex: number;
+  memberType: Exclude<RebarMemberType, "unknown">;
+  title: string;
+  strength: "strong" | "weak";
+};
+
+export type RebarConcreteScheduleSection = {
+  startLine: number;
+  endLineExclusive: number;
+  startIndex: number;
+  endIndex: number;
+  memberType: Exclude<RebarMemberType, "unknown">;
+  title: string;
+  headerTokens: string[];
+  confidence: number;
+  sourceText: string;
+};
+
+const rcScheduleTitleTypes: Array<{
+  memberType: Exclude<RebarMemberType, "unknown">;
+  titlePattern: RegExp;
+}> = [
+  { memberType: "slab", titlePattern: /슬(?:라|래)브일람표/ },
+  { memberType: "beam", titlePattern: /보일람표/ },
+  { memberType: "column", titlePattern: /기둥일람표/ },
+  { memberType: "footing", titlePattern: /기초일람표/ },
+  { memberType: "wall", titlePattern: /벽체일람표/ }
+];
+
+const rcColumnHeaderPatterns: Array<{ label: string; pattern: RegExp }> = [
+  { label: "단면번호", pattern: /단면\s*번호/i },
+  { label: "배근형태", pattern: /배근\s*형태/i },
+  { label: "두께", pattern: /두께(?:\s*\(\s*mm\s*\))?/i },
+  { label: "크기", pattern: /크기/i },
+  { label: "SIZE", pattern: /\bSIZE\b/i },
+  { label: "직경", pattern: /직경/i },
+  { label: "철근", pattern: /철근/i },
+  { label: "주근", pattern: /주근/i },
+  { label: "부근", pattern: /부근/i },
+  { label: "상부근", pattern: /상부근/i },
+  { label: "하부근", pattern: /하부근/i },
+  { label: "늑근", pattern: /늑근/i },
+  { label: "전단철근", pattern: /전단\s*철근/i },
+  { label: "X-DIR", pattern: /\bX\s*-\s*DIR\b/i },
+  { label: "Y-DIR", pattern: /\bY\s*-\s*DIR\b/i },
+  { label: "간격", pattern: /간격/i },
+  { label: "배근", pattern: /배근/i }
+];
+
 function normalizeText(value: string | undefined) {
   return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
 function normalizeMemberName(value: string) {
   return value.replace(/\s+/g, "").toUpperCase();
+}
+
+function normalizeScheduleTitleText(value: string | undefined) {
+  return (value ?? "")
+    .replace(/\s+/g, "")
+    .replace(/철근콘크리트/gi, "철근콘크리트")
+    .replace(/슬라브/g, "슬래브")
+    .toUpperCase();
+}
+
+function getLineStartIndexes(lines: string[]) {
+  const indexes: number[] = [];
+  let offset = 0;
+
+  lines.forEach((line) => {
+    indexes.push(offset);
+    offset += line.length + 1;
+  });
+
+  return indexes;
+}
+
+function getRcScheduleTitle(
+  line: string,
+  drawingNo?: string,
+  drawingTitle?: string
+): RcScheduleSectionTitle | null {
+  const normalizedLine = normalizeScheduleTitleText(line);
+  const normalizedSheetContext = normalizeScheduleTitleText(`${drawingNo ?? ""} ${drawingTitle ?? ""}`);
+  const hasStrongRcPrefix = normalizedLine.includes("철근콘크리트");
+  const hasWeakRcContext =
+    normalizedSheetContext.includes("철근콘크리트") || /\bS-30[1-3]\b/i.test(drawingNo ?? "");
+
+  for (const titleType of rcScheduleTitleTypes) {
+    if (!titleType.titlePattern.test(normalizedLine)) {
+      continue;
+    }
+
+    if (hasStrongRcPrefix) {
+      return {
+        memberType: titleType.memberType,
+        title: line,
+        strength: "strong"
+      };
+    }
+
+    if (hasWeakRcContext) {
+      return {
+        memberType: titleType.memberType,
+        title: line,
+        strength: "weak"
+      };
+    }
+  }
+
+  return null;
+}
+
+function getDetectedColumnHeaders(text: string) {
+  const headers = new Set<string>();
+
+  rcColumnHeaderPatterns.forEach((header) => {
+    if (header.pattern.test(text)) {
+      headers.add(header.label);
+    }
+  });
+
+  return Array.from(headers);
+}
+
+function hasScheduleMemberPattern(text: string) {
+  return Array.from(text.matchAll(memberNamePattern))
+    .map((match) => normalizeMemberName(match[0]))
+    .some((name) => !/^(?:D|HD|SD400|SD500|FCK|FY)\d/i.test(name));
+}
+
+function hasRebarPattern(text: string) {
+  return getDetectedSpecs(text).length > 0;
+}
+
+function getSectionConfidence(args: {
+  titleStrength: RcScheduleSectionTitle["strength"];
+  headerCount: number;
+  hasMemberAndRebarPattern: boolean;
+  sheetConfidence?: number;
+}) {
+  const base = args.titleStrength === "strong" ? 0.68 : 0.48;
+  const headerBonus = args.headerCount >= 2 ? 0.14 : 0;
+  const patternBonus = args.hasMemberAndRebarPattern ? 0.1 : 0;
+  const sheetBonus = args.sheetConfidence ? Math.min(0.08, Math.max(0, args.sheetConfidence - 0.6)) : 0;
+
+  return Math.min(0.92, base + headerBonus + patternBonus + sheetBonus);
+}
+
+function buildScheduleSection(
+  active: RcScheduleSectionCandidate,
+  endLineExclusive: number,
+  endIndex: number,
+  lines: string[],
+  sheetConfidence?: number
+): RebarConcreteScheduleSection | null {
+  const sourceLines = lines.slice(active.startLine, Math.max(active.startLine + 1, endLineExclusive));
+  const sourceText = normalizeText(sourceLines.join(" "));
+  const headerTokens = getDetectedColumnHeaders(sourceText);
+  const hasMemberAndRebarPattern = hasScheduleMemberPattern(sourceText) && hasRebarPattern(sourceText);
+
+  if (headerTokens.length < 2 && !hasMemberAndRebarPattern) {
+    return null;
+  }
+
+  return {
+    startLine: active.startLine,
+    endLineExclusive,
+    startIndex: active.startIndex,
+    endIndex,
+    memberType: active.memberType,
+    title: active.title,
+    headerTokens,
+    confidence: getSectionConfidence({
+      titleStrength: active.strength,
+      headerCount: headerTokens.length,
+      hasMemberAndRebarPattern,
+      sheetConfidence
+    }),
+    sourceText
+  };
+}
+
+export function detectRebarConcreteScheduleSections(
+  pageText: string,
+  drawingNo?: string,
+  drawingTitle?: string,
+  sheetConfidence?: number
+): RebarConcreteScheduleSection[] {
+  const lines = pageText.split(/\r?\n/).map((line) => line.trim());
+  const lineStartIndexes = getLineStartIndexes(lines);
+  const sections: RebarConcreteScheduleSection[] = [];
+  let state: RebarScheduleScanState = "idle";
+  let activeSection: RcScheduleSectionCandidate | null = null;
+
+  const closeActiveSection = (endLineExclusive: number, endIndex: number) => {
+    if (!activeSection) {
+      return;
+    }
+
+    const section = buildScheduleSection(
+      activeSection,
+      endLineExclusive,
+      endIndex,
+      lines,
+      sheetConfidence
+    );
+
+    if (section) {
+      sections.push(section);
+    }
+
+    activeSection = null;
+  };
+
+  lines.forEach((line, index) => {
+    const title = getRcScheduleTitle(line, drawingNo, drawingTitle);
+    const lineStartIndex = lineStartIndexes[index] ?? 0;
+
+    if (title) {
+      if (state === "rc_section_active") {
+        closeActiveSection(index, lineStartIndex);
+      }
+
+      activeSection = {
+        startLine: index,
+        startIndex: lineStartIndex,
+        memberType: title.memberType,
+        title: title.title,
+        strength: title.strength
+      };
+      state = "rc_section_active";
+      return;
+    }
+
+    if (nonRcSectionTerminatorPattern.test(line)) {
+      if (state === "rc_section_active") {
+        closeActiveSection(index, lineStartIndex);
+      }
+
+      state = "non_rc_section_active";
+      return;
+    }
+  });
+
+  if (activeSection) {
+    closeActiveSection(lines.length, pageText.length);
+  }
+
+  return sections;
+}
+
+function inferMemberTypeForSection(
+  memberName: string,
+  sectionType: RebarConcreteScheduleSection["memberType"]
+): RebarMemberType {
+  const member = normalizeMemberName(memberName);
+
+  if (deckSlabMemberPattern.test(member) || basePlateMemberPattern.test(member) || /^NSC\d/i.test(member)) {
+    return "unknown";
+  }
+
+  if (sectionType === "slab" && /^(?:\d{0,2}NS|NMF)\d/i.test(member)) return "slab";
+  if (sectionType === "beam" && /^(?:\d{0,2}NFG|NFG|FG|G|B)\d/i.test(member)) return "beam";
+  if (sectionType === "column" && /^NPC\d/i.test(member)) return "column";
+  if (sectionType === "footing" && /^(?:\d{0,2}NF|NMF)\d/i.test(member)) return "footing";
+  if (sectionType === "wall" && /^(?:RW|W)\d/i.test(member)) return "wall";
+
+  return "unknown";
 }
 
 function createStableId(parts: Array<string | number | undefined>) {
@@ -143,20 +419,20 @@ function inferFutureReviewMemberType(memberName: string, source: string): RebarM
 
 function getFutureReviewLabel(memberName: string, source: string) {
   const member = normalizeMemberName(memberName);
+  const followUpBasis =
+    "해당 항목은 현재 철근콘크리트 철근 수량산출 기본 대상이 아니며, 별도 공종 또는 업체 구조계산 확인이 필요한 후속 검토 대상입니다.";
 
   if (deckSlabMemberPattern.test(member)) {
     return {
       label: "데크 슬라브 / 업체 구조계산 필요",
-      basis:
-        "데크 슬라브는 일반 철근콘크리트 슬라브와 산출 방식이 달라 업체 선정 후 구조계산 및 제조사 자료 확인이 필요합니다."
+      basis: followUpBasis
     };
   }
 
   if (basePlateMemberPattern.test(member)) {
     return {
-      label: "베이스플레이트 참고 항목 / 철골 수량산출 대상",
-      basis:
-        "NSC/BP 계열은 철근콘크리트 기둥 일람표 후보가 아니라 베이스플레이트 또는 철골 관련 후속 검토 항목입니다."
+      label: "철골 / 베이스플레이트",
+      basis: followUpBasis
     };
   }
 
@@ -221,56 +497,75 @@ export function extractRebarMemberScheduleFromPdfResults(
     result.pages.forEach((page) => {
       const sheet = findSheet(drawingIndexes, result.fileName, page.pageNumber);
       const text = page.text ?? "";
+      const rawLines = text.split(/\r?\n/).map((line) => line.trim());
       const lines = text
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter(Boolean);
 
       if (isSchedulePage(text, sheet)) {
-        lines.forEach((line, index) => {
-          const context = getScheduleContextWindow(lines, index);
-          const detectedSpecs = getDetectedSpecs(context);
+        const sections = detectRebarConcreteScheduleSections(
+          text,
+          sheet?.drawingNo,
+          sheet?.drawingTitle,
+          sheet?.confidence
+        );
 
-          if (detectedSpecs.length === 0) return;
+        sections.forEach((scheduleSection) => {
+          const sectionLines = rawLines.slice(
+            scheduleSection.startLine,
+            scheduleSection.endLineExclusive
+          ).filter(Boolean);
 
-          const memberNames = Array.from(context.matchAll(memberNamePattern))
-            .map((match) => normalizeMemberName(match[0]))
-            .filter((name) => !/^(?:D|HD|SD|FCK|FY)\d/i.test(name));
+          sectionLines.forEach((line, index) => {
+            const context = getScheduleContextWindow(sectionLines, index);
+            const detectedSpecs = getDetectedSpecs(context);
 
-          memberNames.forEach((memberName) => {
-            const source = `${sheet?.drawingNo ?? ""} ${sheet?.drawingTitle ?? ""} ${text.slice(0, 1200)} ${context}`;
-            const memberType = inferMemberType(memberName, source);
+            if (detectedSpecs.length === 0) return;
 
-            if (memberType === "unknown") return;
-            if (!isDefaultScheduleMember(memberName, memberType, source)) return;
+            const memberNames = Array.from(context.matchAll(memberNamePattern))
+              .map((match) => normalizeMemberName(match[0]))
+              .filter((name) => !/^(?:D|HD|SD|FCK|FY)\d/i.test(name));
 
-            const section = parseSectionSize(context);
-            const spacingSpecs = detectedSpecs.filter((spec) => spec.includes("@"));
-            const countSpecs = detectedSpecs.filter((spec) => !spec.includes("@"));
-            const record: RebarMemberScheduleRecord = {
-              id: createStableId([result.fileName, page.pageNumber, memberName]),
-              memberName,
-              memberType,
-              drawingNo: sheet?.drawingNo,
-              drawingTitle: sheet?.drawingTitle,
-              sourcePage: page.pageNumber,
-              sourceType: "schedule",
-              sectionName: sheet?.drawingTitle,
-              detectedSpecs,
-              sectionSize: section
-                ? [section.widthMm, section.lengthMm ?? section.depthMm].filter(Boolean).join("x")
-                : undefined,
-              widthMm: section?.widthMm,
-              depthMm: section?.depthMm,
-              thicknessMm: memberType === "slab" ? section?.depthMm : undefined,
-              mainBars: countSpecs,
-              stirrups: spacingSpecs,
-              spacingSpecs,
-              sourceTextSnippet: context,
-              confidence: sheet?.confidence ? Math.max(0.7, sheet.confidence) : 0.72
-            };
+            memberNames.forEach((memberName) => {
+              const source = `${sheet?.drawingNo ?? ""} ${sheet?.drawingTitle ?? ""} ${scheduleSection.title} ${scheduleSection.sourceText} ${context}`;
+              const memberType = inferMemberTypeForSection(
+                memberName,
+                scheduleSection.memberType
+              );
 
-            scheduleMap.set(memberName, mergeScheduleRecord(scheduleMap.get(memberName), record));
+              if (memberType === "unknown") return;
+              if (!isDefaultScheduleMember(memberName, memberType, source)) return;
+
+              const section = parseSectionSize(context);
+              const spacingSpecs = detectedSpecs.filter((spec) => spec.includes("@"));
+              const countSpecs = detectedSpecs.filter((spec) => !spec.includes("@"));
+              const record: RebarMemberScheduleRecord = {
+                id: createStableId([result.fileName, page.pageNumber, memberType, memberName]),
+                memberName,
+                memberType,
+                drawingNo: sheet?.drawingNo,
+                drawingTitle: sheet?.drawingTitle,
+                sourcePage: page.pageNumber,
+                sourceType: "schedule",
+                sectionName: scheduleSection.title || sheet?.drawingTitle,
+                detectedSpecs,
+                sectionSize: section
+                  ? [section.widthMm, section.lengthMm ?? section.depthMm].filter(Boolean).join("x")
+                  : undefined,
+                widthMm: section?.widthMm,
+                depthMm: section?.depthMm,
+                thicknessMm: memberType === "slab" || memberType === "wall" ? section?.depthMm : undefined,
+                mainBars: countSpecs,
+                stirrups: spacingSpecs,
+                spacingSpecs,
+                sourceTextSnippet: context,
+                confidence: scheduleSection.confidence
+              };
+
+              const scheduleKey = `${memberType}|${memberName}`;
+              scheduleMap.set(scheduleKey, mergeScheduleRecord(scheduleMap.get(scheduleKey), record));
+            });
           });
         });
       } else if (isPlanPage(text, sheet)) {
@@ -313,7 +608,6 @@ export function buildRebarQuantityCandidatesFromMemberSchedules(
   const candidates = schedules.flatMap((schedule) => {
     if (
       schedule.memberType === "unknown" ||
-      schedule.memberType === "wall" ||
       schedule.detectedSpecs.length === 0
     ) {
       return [];

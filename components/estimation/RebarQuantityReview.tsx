@@ -646,6 +646,12 @@ function CandidateList({
   const futureReviewCandidates = candidates.filter(
     (candidate) => candidate.memberListSource === "future_review"
   );
+  const deckFutureReviewCandidates = futureReviewCandidates.filter((candidate) =>
+    /^(?:DS|SD)\d/i.test(candidate.memberName ?? "") || /데크|DECK/i.test(candidate.note ?? "")
+  );
+  const steelBaseFutureReviewCandidates = futureReviewCandidates.filter(
+    (candidate) => !deckFutureReviewCandidates.some((deck) => deck.id === candidate.id)
+  );
 
   if (candidates.length === 0) {
     return (
@@ -709,12 +715,20 @@ function CandidateList({
         title="참고 문구 / 검토 필요"
       />
       <CollapsibleResultList
-        emptyMessage="후속 검토 대상 후보가 없습니다."
+        emptyMessage="데크 슬라브 후속 검토 후보가 없습니다."
         initialVisibleCount={0}
-        items={futureReviewCandidates}
+        items={deckFutureReviewCandidates}
         renderItem={renderCandidate}
-        summaryLabel={`후속 검토 ${futureReviewCandidates.length}개`}
-        title="후속 검토 대상"
+        summaryLabel={`데크 슬라브 ${deckFutureReviewCandidates.length}개`}
+        title="데크 슬라브 / 업체 구조계산 필요"
+      />
+      <CollapsibleResultList
+        emptyMessage="철골 / 베이스플레이트 후속 검토 후보가 없습니다."
+        initialVisibleCount={0}
+        items={steelBaseFutureReviewCandidates}
+        renderItem={renderCandidate}
+        summaryLabel={`철골 / 베이스플레이트 ${steelBaseFutureReviewCandidates.length}개`}
+        title="철골 / 베이스플레이트"
       />
     </div>
   );
@@ -1307,7 +1321,7 @@ export function RebarQuantityReview({
         })}
       </div>
       <p className="mt-2 text-[11px] leading-5 text-slate">
-        탭 숫자는 구조일람표 기반 기본 후보 수입니다. 평면도 감지 후보와 일반 노트 참고 문구, 후속 검토 대상은 접기 영역에서 확인합니다. 벽체 일람표가 없으면 벽체 기본 후보는 0개로 표시됩니다.
+        기본 후보는 철근콘크리트 부재 일람표 제목과 컬럼 헤더를 함께 감지한 구간에서 생성됩니다. 데크 슬라브, 베이스플레이트, 철골 관련 구간은 현재 RC 철근 수량산출 대상에서 제외하고 후속 검토 대상으로 분리합니다. 비RC 구간을 만나도 이후의 다른 RC 일람표는 계속 탐색합니다.
       </p>
 
       <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
