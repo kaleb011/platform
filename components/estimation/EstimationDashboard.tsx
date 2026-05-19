@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Bell,
@@ -283,6 +283,70 @@ export function EstimationDashboard() {
     () => buildQuantityRoadmap(drawingSheetIndexes),
     [drawingSheetIndexes]
   );
+
+  useEffect(() => {
+    if (activePdfTextResults.length === 0) {
+      return;
+    }
+
+    const refreshedCandidates = activePdfTextResults.flatMap((result) => {
+      const rebarMemberSchedules = extractRebarMemberScheduleFromPdfResults(
+        [result],
+        drawingSheetIndexes
+      );
+
+      return [
+        ...buildRebarQuantityCandidatesFromMemberSchedules(
+          rebarMemberSchedules,
+          result.fileName
+        ),
+        ...buildPlanUnmatchedRebarCandidatesFromPdfResults(
+          [result],
+          drawingSheetIndexes,
+          rebarMemberSchedules
+        ),
+        ...buildFutureReviewRebarCandidatesFromPdfResults([result], drawingSheetIndexes)
+      ];
+    });
+
+    if (refreshedCandidates.length === 0) {
+      return;
+    }
+
+    setRebarCandidates((current) => {
+      const existingKeys = new Set(
+        current.map((candidate) =>
+          [
+            candidate.sourceFileName,
+            candidate.sourcePage,
+            candidate.memberName,
+            candidate.memberType,
+            candidate.position,
+            candidate.diameter,
+            candidate.barCount ?? "",
+            candidate.spacingMm ?? ""
+          ].join("|")
+        )
+      );
+      const missingCandidates = refreshedCandidates.filter((candidate) => {
+        const key = [
+          candidate.sourceFileName,
+          candidate.sourcePage,
+          candidate.memberName,
+          candidate.memberType,
+          candidate.position,
+          candidate.diameter,
+          candidate.barCount ?? "",
+          candidate.spacingMm ?? ""
+        ].join("|");
+
+        return !existingKeys.has(key);
+      });
+
+      return missingCandidates.length > 0 ? [...missingCandidates, ...current] : current;
+    });
+  }, [activePdfTextResults, drawingSheetIndexes]);
+
   const standardEstimateItems = useMemo<EstimateItemRecord[]>(
     () =>
       deriveEstimateItems({

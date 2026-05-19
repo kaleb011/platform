@@ -143,6 +143,14 @@ function normalizeText(value: string | undefined) {
   return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
+function normalizeScheduleParsingText(value: string | undefined) {
+  return (value ?? "")
+    .normalize("NFKC")
+    .replace(/[‐‑‒–—−]/g, "-")
+    .replace(/[＠﹫]/g, "@")
+    .replace(/[×✕✖]/g, "x");
+}
+
 function normalizeMemberName(value: string) {
   return value.replace(/\s+/g, "").toUpperCase();
 }
@@ -592,7 +600,7 @@ function getScheduleContextWindow(lines: string[], index: number) {
 }
 
 function getMemberNamesFromText(text: string) {
-  return Array.from(text.matchAll(memberNamePattern))
+  return Array.from(normalizeScheduleParsingText(text).matchAll(memberNamePattern))
     .map((match) => normalizeMemberName(match[0]))
     .filter((name) => !/^(?:D|HD|SD|FCK|FY)\d/i.test(name));
 }
@@ -608,8 +616,9 @@ function getSectionMemberNames(
 
 function getInferredCountSpecs(text: string) {
   const specs = new Set<string>();
+  const normalizedText = normalizeScheduleParsingText(text);
 
-  Array.from(text.matchAll(/\b(\d{1,3})\s*[- ]\s*(10|13|16|19|22|25|29|32)\b/gi)).forEach(
+  Array.from(normalizedText.matchAll(/\b(\d{1,3})\s*[- ]\s*(10|13|16|19|22|25|29|32)\b/gi)).forEach(
     (match) => {
       specs.add(`${match[1]}-D${match[2]}`);
     }
@@ -620,8 +629,9 @@ function getInferredCountSpecs(text: string) {
 
 function getInferredSpacingSpecs(text: string) {
   const specs = new Set<string>();
+  const normalizedText = normalizeScheduleParsingText(text);
 
-  Array.from(text.matchAll(/\b(?:HD|D)\s*(10|13|16|19|22|25|29|32)\s*(\d{2,4})\b/gi)).forEach(
+  Array.from(normalizedText.matchAll(/\b(?:HD|D)\s*(10|13|16|19|22|25|29|32)\s*(\d{2,4})\b/gi)).forEach(
     (match) => {
       const spacing = Number(match[2]);
 
@@ -636,23 +646,25 @@ function getInferredSpacingSpecs(text: string) {
 
 function getDetectedSpecs(text: string) {
   const specs = new Set<string>();
+  const normalizedText = normalizeScheduleParsingText(text);
 
-  parseRebarCountPattern(text).forEach((pattern) => specs.add(pattern.rawText.replace(/\s+/g, "")));
-  parseRebarSpacingPattern(text).forEach((pattern) => specs.add(pattern.rawText.replace(/\s+/g, "")));
-  getInferredCountSpecs(text).forEach((spec) => specs.add(spec));
-  getInferredSpacingSpecs(text).forEach((spec) => specs.add(spec));
+  parseRebarCountPattern(normalizedText).forEach((pattern) => specs.add(pattern.rawText.replace(/\s+/g, "")));
+  parseRebarSpacingPattern(normalizedText).forEach((pattern) => specs.add(pattern.rawText.replace(/\s+/g, "")));
+  getInferredCountSpecs(normalizedText).forEach((spec) => specs.add(spec));
+  getInferredSpacingSpecs(normalizedText).forEach((spec) => specs.add(spec));
 
   return Array.from(specs);
 }
 
 function parseScheduleSectionSize(text: string) {
-  const parsed = parseSectionSize(text);
+  const normalizedText = normalizeScheduleParsingText(text);
+  const parsed = parseSectionSize(normalizedText);
 
   if (parsed) {
     return parsed;
   }
 
-  const looseMatch = text.match(/\b([2-9]\d{2,4})\s+(?:[xX]\s*)?([2-9]\d{2,4})\b/);
+  const looseMatch = normalizedText.match(/\b([2-9]\d{2,4})\s+(?:[xX]\s*)?([2-9]\d{2,4})\b/);
 
   return looseMatch
     ? { widthMm: Number(looseMatch[1]), depthMm: Number(looseMatch[2]) }
@@ -703,6 +715,79 @@ function mergeScheduleRecord(
       .slice(0, 320),
     confidence: Math.max(current.confidence, next.confidence)
   };
+}
+
+function getTextWindowAroundMember(text: string, memberName: string) {
+  const normalizedText = normalizeScheduleParsingText(text);
+  const memberPattern = new RegExp(`\\b${memberName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const memberMatch = normalizedText.match(memberPattern);
+  const start = memberMatch?.index ?? 0;
+  const nextMemberMatch = normalizedText.slice(start + memberName.length).match(/\bNPC\d+[A-Z]?\b/i);
+  const nextStart =
+    nextMemberMatch?.index === undefined
+      ? normalizedText.length
+      : start + memberName.length + nextMemberMatch.index;
+
+  return normalizeText(
+    normalizedText.slice(
+      Math.max(0, start - 180),
+      Math.min(normalizedText.length, Math.max(nextStart, start + 700))
+    )
+  );
+}
+
+function extractColumnFallbackSchedules(args: {
+  fileName: string;
+  pageNumber: number;
+  sheet?: DrawingSheetIndexRecord;
+  text: string;
+}) {
+  const source = `${args.sheet?.drawingNo ?? ""} ${args.sheet?.drawingTitle ?? ""} ${args.text}`;
+  const hasColumnContext = /\bS-302\b/i.test(source) || /기\s*둥\s*일\s*람\s*표|COLUMN\s*SCHEDULE/i.test(source);
+  const memberNames = Array.from(new Set(getMemberNamesFromText(args.text).filter((name) => /^NPC\d/i.test(name))));
+
+  if (!hasColumnContext || memberNames.length === 0) {
+    return [];
+  }
+
+  return memberNames.flatMap<RebarMemberScheduleRecord>((memberName) => {
+    const context = getTextWindowAroundMember(args.text, memberName);
+    const detectedSpecs = getDetectedSpecs(context).length > 0
+      ? getDetectedSpecs(context)
+      : getDetectedSpecs(args.text);
+
+    if (detectedSpecs.length === 0) {
+      return [];
+    }
+
+    const section = parseScheduleSectionSize(context) ?? parseScheduleSectionSize(args.text);
+    const spacingSpecs = detectedSpecs.filter((spec) => spec.includes("@"));
+    const countSpecs = detectedSpecs.filter((spec) => !spec.includes("@"));
+
+    return [
+      {
+        id: createStableId([args.fileName, args.pageNumber, "column", memberName, "fallback"]),
+        memberName,
+        memberType: "column",
+        drawingNo: args.sheet?.drawingNo,
+        drawingTitle: args.sheet?.drawingTitle,
+        sourcePage: args.pageNumber,
+        sourceType: "schedule",
+        sectionName: args.sheet?.drawingTitle ?? "철근콘크리트 기둥 일람표",
+        detectedSpecs,
+        sectionSize: section
+          ? [section.widthMm, section.lengthMm ?? section.depthMm].filter(Boolean).join("x")
+          : undefined,
+        widthMm: section?.widthMm,
+        depthMm: section?.depthMm,
+        mainBars: countSpecs,
+        stirrups: spacingSpecs,
+        spacingSpecs,
+        sourceTextSnippet: context,
+        confidence: 0.74
+      }
+    ];
+  });
 }
 
 export function extractRebarMemberScheduleFromPdfResults(
@@ -792,6 +877,16 @@ export function extractRebarMemberScheduleFromPdfResults(
               scheduleMap.set(scheduleKey, mergeScheduleRecord(scheduleMap.get(scheduleKey), record));
             });
           });
+        });
+
+        extractColumnFallbackSchedules({
+          fileName: result.fileName,
+          pageNumber: page.pageNumber,
+          sheet,
+          text
+        }).forEach((record) => {
+          const scheduleKey = `${record.memberType}|${record.memberName}`;
+          scheduleMap.set(scheduleKey, mergeScheduleRecord(scheduleMap.get(scheduleKey), record));
         });
       } else if (isPlanPage(text, sheet)) {
         lines.forEach((line, index) => {
