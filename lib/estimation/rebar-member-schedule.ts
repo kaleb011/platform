@@ -16,6 +16,11 @@ import type {
   RebarQuantityCandidateRecord
 } from "@/lib/estimation/types";
 
+const koreanRcScheduleTitlePattern =
+  /철근\s*콘크리트\s*(?:슬라브|슬래브|보|기둥|기초|벽체)\s*일람표/i;
+const koreanNonRcSectionTerminatorPattern =
+  /데크\s*슬라브|데크\s*PL|베이스\s*플레이트|베이스플레이트|앵커\s*볼트/i;
+
 const scheduleTitlePattern =
   /구조일람표|슬라브\s*일람표|슬래브\s*일람표|보\s*일람표|기둥\s*일람표|기초\s*일람표|베이스플레이트|STRUCTURAL SCHEDULE|BEAM SCHEDULE|COLUMN SCHEDULE|FOOTING SCHEDULE|SLAB SCHEDULE/i;
 const planTitlePattern = /구조평면도|FOUNDATION PLAN|FRAMING PLAN|SLAB PLAN|STRUCTURAL PLAN/i;
@@ -204,6 +209,31 @@ function getRcScheduleTitle(
   drawingNo?: string,
   drawingTitle?: string
 ): RcScheduleSectionTitle | null {
+  if (koreanNonRcSectionTerminatorPattern.test(line)) {
+    return null;
+  }
+
+  const koreanTitleMatch = line.match(
+    /철근\s*콘크리트\s*(슬라브|슬래브|보|기둥|기초|벽체)\s*일람표/i
+  );
+
+  if (koreanTitleMatch) {
+    const koreanMemberTypeMap: Record<string, Exclude<RebarMemberType, "unknown">> = {
+      "슬라브": "slab",
+      "슬래브": "slab",
+      "보": "beam",
+      "기둥": "column",
+      "기초": "footing",
+      "벽체": "wall"
+    };
+
+    return {
+      memberType: koreanMemberTypeMap[koreanTitleMatch[1]] ?? "slab",
+      title: line,
+      strength: "strong"
+    };
+  }
+
   const normalizedLine = normalizeScheduleTitleText(line);
   const normalizedSheetContext = normalizeScheduleTitleText(`${drawingNo ?? ""} ${drawingTitle ?? ""}`);
   const hasStrongRcPrefix = normalizedLine.includes("철근콘크리트");
@@ -257,7 +287,6 @@ function getDetectedColumnHeaders(text: string) {
       headers.add(header.label);
     }
   });
-
   return Array.from(headers);
 }
 
@@ -274,6 +303,10 @@ function getScheduleMemberTokens(text: string) {
 
 function hasNpcMemberToken(text: string) {
   return getScheduleMemberTokens(text).some((name) => /^NPC\d/i.test(name));
+}
+
+function hasRcScheduleTitleLead(text: string) {
+  return /철근|콘크리트|구조|일람표|STRUCTURAL|BEAM|COLUMN|FOOTING|SLAB|WALL/i.test(text);
 }
 
 function hasRebarPattern(text: string) {
@@ -390,7 +423,10 @@ export function detectRebarConcreteScheduleSections(
 
   lines.forEach((line, index) => {
     const titleText = lines.slice(index, Math.min(lines.length, index + 3)).join(" ");
-    const title = getRcScheduleTitle(titleText, drawingNo, drawingTitle);
+    const title =
+      state === "non_rc_section_active" && !hasRcScheduleTitleLead(line)
+        ? null
+        : getRcScheduleTitle(titleText, drawingNo, drawingTitle);
     const lineStartIndex = lineStartIndexes[index] ?? 0;
 
     if (title) {
@@ -409,7 +445,7 @@ export function detectRebarConcreteScheduleSections(
       return;
     }
 
-    if (nonRcSectionTerminatorPattern.test(line)) {
+    if (nonRcSectionTerminatorPattern.test(line) || koreanNonRcSectionTerminatorPattern.test(line)) {
       if (state === "rc_section_active") {
         const activeTextBeforeLine = activeSection
           ? lines.slice(activeSection.startLine, index).join(" ")
@@ -496,6 +532,7 @@ function isSchedulePage(text: string, sheet?: DrawingSheetIndexRecord) {
   return (
     /\bS-30[1-3]\b/i.test(source) ||
     sheet?.sheetType === "structural_schedule" ||
+    koreanRcScheduleTitlePattern.test(source) ||
     scheduleTitlePattern.test(source)
   );
 }
@@ -788,6 +825,56 @@ function extractColumnFallbackSchedules(args: {
       }
     ];
   });
+}
+
+export type RebarMemberScheduleTextParseOptions = {
+  fileName?: string;
+  pageNumber?: number;
+  drawingNo?: string;
+  drawingTitle?: string;
+  sheetConfidence?: number;
+  sheetType?: DrawingSheetIndexRecord["sheetType"];
+};
+
+export function extractRebarMemberScheduleFromText(
+  text: string,
+  options: RebarMemberScheduleTextParseOptions = {}
+): RebarMemberScheduleRecord[] {
+  const fileName = options.fileName ?? "rebar-member-schedule-fixture.txt";
+  const pageNumber = options.pageNumber ?? 1;
+  const drawingFileId = "rebar-member-schedule-fixture";
+  const pdfResult: PdfTextExtractionResult = {
+    fileName,
+    pageCount: 1,
+    status: "success",
+    pages: [
+      {
+        id: `${drawingFileId}-page-${pageNumber}`,
+        drawingFileId,
+        pageNumber,
+        text,
+        textLength: text.length,
+        extractionStatus: "success"
+      }
+    ]
+  };
+  const sheet: DrawingSheetIndexRecord = {
+    id: `${drawingFileId}-sheet-${pageNumber}`,
+    sourcePage: pageNumber,
+    sourceFileName: fileName,
+    drawingNo: options.drawingNo,
+    drawingTitle: options.drawingTitle,
+    discipline: "rebar_concrete",
+    sheetType: options.sheetType ?? "structural_schedule",
+    detectedKeywords: [],
+    quantityReadinessStatus: "schedule_based_calculation",
+    quantityReadinessReason: "Fixture text parse helper",
+    relatedSheetIds: [],
+    confidence: options.sheetConfidence ?? 0.9,
+    sourceTextSnippet: text.slice(0, 320)
+  };
+
+  return extractRebarMemberScheduleFromPdfResults([pdfResult], [sheet]);
 }
 
 export function extractRebarMemberScheduleFromPdfResults(
