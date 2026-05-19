@@ -73,18 +73,22 @@ const rcScheduleTitleTypes: Array<{
   { memberType: "wall", titlePattern: /벽체일람표/ }
 ];
 
-const rcColumnHeaderPatterns: Array<{ label: string; pattern: RegExp }> = [
+const rcColumnHeaderPatterns: Array<{ label: string; pattern: RegExp; normalizedPattern?: RegExp }> = [
   { label: "단면번호", pattern: /단면\s*번호/i },
+  { label: "단면", pattern: /단\s*면(?!\s*번호)/i, normalizedPattern: /단면(?!번호)/i },
   { label: "배근형태", pattern: /배근\s*형태/i },
   { label: "두께", pattern: /두께(?:\s*\(\s*mm\s*\))?/i },
   { label: "크기", pattern: /크기/i },
+  { label: "구분", pattern: /구\s*분/i },
   { label: "SIZE", pattern: /\bSIZE\b/i },
   { label: "직경", pattern: /직경/i },
   { label: "철근", pattern: /철근/i },
   { label: "주근", pattern: /주근/i },
-  { label: "부근", pattern: /부근/i },
+  { label: "부근", pattern: /부\s*근/i },
   { label: "상부근", pattern: /상부근/i },
   { label: "하부근", pattern: /하부근/i },
+  { label: "상하단부", pattern: /상\s*하\s*단\s*부/i },
+  { label: "중앙부", pattern: /중\s*앙\s*부/i },
   { label: "늑근", pattern: /늑근/i },
   { label: "전단철근", pattern: /전단\s*철근/i },
   { label: "X-DIR", pattern: /\bX\s*-\s*DIR\b/i },
@@ -105,6 +109,18 @@ function normalizeScheduleTitleText(value: string | undefined) {
   return (value ?? "")
     .replace(/\s+/g, "")
     .replace(/철근콘크리트/gi, "철근콘크리트")
+    .replace(/슬라브/g, "슬래브")
+    .toUpperCase();
+}
+
+function normalizeScheduleHeaderText(value: string | undefined) {
+  return (value ?? "")
+    .replace(/철근\s*콘크리트/gi, "철근콘크리트")
+    .replace(/단\s*면/g, "단면")
+    .replace(/부\s*근/g, "부근")
+    .replace(/상\s*하\s*단\s*부/g, "상하단부")
+    .replace(/중\s*앙\s*부/g, "중앙부")
+    .replace(/\s+/g, "")
     .replace(/슬라브/g, "슬래브")
     .toUpperCase();
 }
@@ -159,9 +175,13 @@ function getRcScheduleTitle(
 
 function getDetectedColumnHeaders(text: string) {
   const headers = new Set<string>();
+  const normalizedText = normalizeScheduleHeaderText(text);
 
   rcColumnHeaderPatterns.forEach((header) => {
-    if (header.pattern.test(text)) {
+    if (
+      header.pattern.test(text) ||
+      (header.normalizedPattern ?? header.pattern).test(normalizedText)
+    ) {
       headers.add(header.label);
     }
   });
