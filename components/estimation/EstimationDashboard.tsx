@@ -29,7 +29,6 @@ import { ManualStandardMatchReview } from "@/components/estimation/ManualStandar
 import { PdfTextExtractionSummary } from "@/components/estimation/PdfTextExtractionSummary";
 import { RebarQuantityReview } from "@/components/estimation/RebarQuantityReview";
 import { RebarStandardEstimatePanel } from "@/components/estimation/RebarStandardEstimatePanel";
-import { ScheduleForecastDashboard } from "@/components/estimation/ScheduleForecastDashboard";
 import { StandardMatchTable } from "@/components/estimation/StandardMatchTable";
 import { UnitPriceUploadPanel } from "@/components/estimation/UnitPriceUploadPanel";
 import { UploadedDrawingFilesTable } from "@/components/estimation/UploadedDrawingFilesTable";
@@ -83,7 +82,6 @@ import {
   isManualStandardMatchTarget,
   summarizeEstimateStatementItems
 } from "@/lib/estimation/service";
-import { buildScheduleForecastFromEstimateItems } from "@/lib/estimation/schedule-forecast";
 import { parseArchitectureUnitPriceWorkbook } from "@/lib/estimation/unit-price-parser";
 import type {
   DrawingFileRecord,
@@ -127,7 +125,6 @@ const compactDashboardSectionIds = [
   "manual-match",
   "estimate-items",
   "manual-statement",
-  "schedule-forecast",
   "drawing-waiting"
 ] as const;
 
@@ -472,10 +469,6 @@ export function EstimationDashboard() {
   const reflectedUploadedPdfEstimateCount = estimateItems.filter(
     (item) => item.matchSource === "uploaded_pdf"
   ).length;
-  const scheduleForecast = useMemo(
-    () => buildScheduleForecastFromEstimateItems(manualEstimateStatementItems),
-    [manualEstimateStatementItems]
-  );
 
   const extractedSuccessPageCount = activePdfTextResults.reduce(
     (count, result) =>
@@ -1107,12 +1100,11 @@ export function EstimationDashboard() {
     "manual-match": `수동 표준품셈 검토 ${manualReviewMatches.length}건`,
     "estimate-items": `적산내역 ${estimateItems.length}건`,
     "manual-statement": `수기 단가 내역 ${manualEstimateStatementItems.length}건 · 산출 ${manualEstimateStatementSummary.calculatedCount}건`,
-    "schedule-forecast": `예상공정 ${scheduleForecast.items.length}건`,
     "drawing-waiting": "도면 업로드 후 분석 흐름이 표시되는 대기 구역"
   };
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-7xl px-4 py-6 text-foreground sm:px-6 lg:px-8">
+    <div className="mx-auto min-h-screen w-full max-w-[1680px] px-2 py-4 text-foreground sm:px-3 lg:px-4 xl:px-5">
       <header className="mb-6 rounded-[20px] border border-border bg-white px-4 py-4 shadow-sm lg:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -1157,7 +1149,7 @@ export function EstimationDashboard() {
         </div>
       </header>
 
-      <section className="mb-6 rounded-[22px] border border-border bg-white px-5 py-5 shadow-sm lg:px-7">
+      <section className="mb-5 rounded-[22px] border border-border bg-white px-4 py-5 shadow-sm lg:px-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <p className="text-[12px] font-semibold text-primary">도면 기반 적산 보조</p>
@@ -1202,7 +1194,7 @@ export function EstimationDashboard() {
         </div>
       </section>
 
-      <section className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
         {summaryCards.map((card) => {
           const Icon = summaryIcons[card.key];
 
@@ -1221,8 +1213,8 @@ export function EstimationDashboard() {
         })}
       </section>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        <aside className="space-y-5 lg:col-span-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+        <aside className="space-y-4">
           <CompactDashboardSection
             compact={Boolean(compactSections["drawing-upload"])}
             id="drawing-upload"
@@ -1269,7 +1261,7 @@ export function EstimationDashboard() {
           </CompactDashboardSection>
         </aside>
 
-        <main className="space-y-5 lg:col-span-8">
+        <main className="min-w-0 space-y-4">
               {drawingDataExists ? (
                 <>
                   <CompactDashboardSection
@@ -1409,18 +1401,6 @@ export function EstimationDashboard() {
                       unitPriceInputs={manualUnitPriceInputs}
                     />
                   </CompactDashboardSection>
-                  <CompactDashboardSection
-                    compact={Boolean(compactSections["schedule-forecast"])}
-                    id="schedule-forecast"
-                    onToggle={handleToggleCompactSection}
-                    summary={sectionSummary["schedule-forecast"]}
-                    title="예상공정 대시보드"
-                  >
-                    <ScheduleForecastDashboard
-                      items={scheduleForecast.items}
-                      summary={scheduleForecast.summary}
-                    />
-                  </CompactDashboardSection>
                   <details className="rounded-[20px] border border-border bg-white px-4 py-4 shadow-sm">
                     <summary className="cursor-pointer text-[14px] font-bold text-foreground">
                       참고용 일위대가 자료
@@ -1469,20 +1449,6 @@ export function EstimationDashboard() {
                   </Card>
                 </CompactDashboardSection>
               )}
-              {!drawingDataExists ? (
-                <CompactDashboardSection
-                  compact={Boolean(compactSections["schedule-forecast"])}
-                  id="schedule-forecast"
-                  onToggle={handleToggleCompactSection}
-                  summary={sectionSummary["schedule-forecast"]}
-                  title="예상공정 대시보드"
-                >
-                  <ScheduleForecastDashboard
-                    items={scheduleForecast.items}
-                    summary={scheduleForecast.summary}
-                  />
-                </CompactDashboardSection>
-              ) : null}
         </main>
       </div>
 

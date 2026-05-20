@@ -71,13 +71,13 @@ export function ManualEstimateStatementTable({
   const canToggle = items.length > 5;
 
   return (
-    <Card className="section-enter">
+    <Card className="section-enter min-w-0 overflow-hidden">
       <SectionHeading
         title="수기 단가 기반 적산내역서"
         description="수량 산출은 시스템이 보조하고, 최종 단가는 사용자가 입력합니다. 수량과 공사단가가 모두 있으면 금액을 계산합니다."
         action={
           <Button
-            className="min-h-[38px] rounded-[14px] px-3 text-[12px]"
+            className="min-h-[38px] max-w-full rounded-[14px] px-3 text-[12px]"
             disabled={items.length === 0}
             onClick={onExportExcel}
             type="button"
@@ -122,7 +122,7 @@ export function ManualEstimateStatementTable({
         비어 있으면 단가 입력 필요, 수량 검토 대상이면 수량 확인 필요로 표시합니다.
       </div>
 
-      <div className="mt-4 overflow-x-auto">
+      <div className="mt-4 max-w-full overflow-x-auto">
         <table className="min-w-[1180px] text-left">
           <thead>
             <tr className="border-b border-border text-[12px] text-slate">
