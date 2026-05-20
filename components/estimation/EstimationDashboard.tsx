@@ -4,11 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Bell,
+  ChevronDown,
+  ChevronRight,
   CheckCircle2,
   Database,
   FileSearch,
   Layers3,
   LoaderCircle,
+  Maximize2,
+  Minimize2,
   Sparkles,
   UserRound
 } from "lucide-react";
@@ -30,6 +34,7 @@ import { StandardMatchTable } from "@/components/estimation/StandardMatchTable";
 import { UnitPriceUploadPanel } from "@/components/estimation/UnitPriceUploadPanel";
 import { UploadedDrawingFilesTable } from "@/components/estimation/UploadedDrawingFilesTable";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {
@@ -108,6 +113,73 @@ const summaryIcons = {
 
 type SummaryCardKey = keyof typeof summaryIcons;
 type UnitPriceParseStatus = "idle" | "parsing" | "success" | "failed";
+
+const compactDashboardSectionIds = [
+  "drawing-upload",
+  "uploaded-files",
+  "pdf-summary",
+  "drawing-intelligence",
+  "rebar-candidates",
+  "rebar-standard",
+  "drawing-candidates",
+  "approval-link",
+  "standard-match",
+  "manual-match",
+  "estimate-items",
+  "manual-statement",
+  "schedule-forecast",
+  "drawing-waiting"
+] as const;
+
+type CompactDashboardSectionId = (typeof compactDashboardSectionIds)[number];
+
+type CompactDashboardSectionProps = {
+  children: React.ReactNode;
+  compact: boolean;
+  id: CompactDashboardSectionId;
+  onToggle: (id: CompactDashboardSectionId) => void;
+  summary: string;
+  title: string;
+};
+
+function CompactDashboardSection({
+  children,
+  compact,
+  id,
+  onToggle,
+  summary,
+  title
+}: CompactDashboardSectionProps) {
+  const ToggleIcon = compact ? ChevronRight : ChevronDown;
+
+  return (
+    <section className="grid gap-2">
+      <div className="flex min-w-0 items-center justify-between gap-2 rounded-[14px] border border-border bg-white/80 px-3 py-2 shadow-sm">
+        <div className="min-w-0">
+          <p className="truncate text-[12px] font-bold text-foreground">{title}</p>
+          <p className="mt-0.5 truncate text-[11px] text-slate">{summary}</p>
+        </div>
+        <Button
+          aria-expanded={!compact}
+          className="min-h-[32px] shrink-0 rounded-[11px] px-2 text-[11px]"
+          onClick={() => onToggle(id)}
+          type="button"
+          variant="ghost"
+        >
+          <ToggleIcon className="mr-1 h-3.5 w-3.5" />
+          {compact ? "펼치기" : "간략히"}
+        </Button>
+      </div>
+      {compact ? (
+        <div className="rounded-[14px] border border-dashed border-border bg-[#f8fafc] px-4 py-3 text-[12px] leading-5 text-slate">
+          {summary}
+        </div>
+      ) : (
+        children
+      )}
+    </section>
+  );
+}
 
 function parseManualUnitPrice(value: string | undefined): number | null {
   if (!value) {
@@ -202,6 +274,9 @@ export function EstimationDashboard() {
   const [notice, setNotice] = useState<string | null>(
     "샘플 도면/적산 데이터가 있는 프로젝트와 도면 데이터가 없는 프로젝트 흐름을 함께 확인할 수 있습니다."
   );
+  const [compactSections, setCompactSections] = useState<
+    Partial<Record<CompactDashboardSectionId, boolean>>
+  >({});
 
   const selectedProject = projectStates.find((project) => project.projectId === selectedProjectId);
   const activeProject = selectedProject ?? projectStates[0];
@@ -998,6 +1073,43 @@ export function EstimationDashboard() {
   const projectFlowMessage = drawingDataExists
     ? "저장된 도면/적산 데이터가 있습니다. 도면 추출 후보와 적산내역을 확인할 수 있습니다."
     : "이 프로젝트에는 아직 도면 데이터가 없습니다. PDF 도면을 업로드하면 적산내역 초안 생성 흐름을 시작할 수 있습니다.";
+  const compactSectionCount = compactDashboardSectionIds.filter((id) => compactSections[id])
+    .length;
+
+  const handleToggleCompactSection = (id: CompactDashboardSectionId) => {
+    setCompactSections((current) => ({
+      ...current,
+      [id]: !current[id]
+    }));
+  };
+
+  const handleSetAllSectionsCompact = (compact: boolean) => {
+    setCompactSections(
+      Object.fromEntries(compactDashboardSectionIds.map((id) => [id, compact])) as Record<
+        CompactDashboardSectionId,
+        boolean
+      >
+    );
+  };
+
+  const sectionSummary: Record<CompactDashboardSectionId, string> = {
+    "drawing-upload": drawingDataExists
+      ? `도면 데이터 ${drawingFiles.length}건 확인 중`
+      : "PDF/PNG/JPG/DWG 도면을 업로드하는 시작 구역",
+    "uploaded-files": `업로드된 도면 ${drawingFiles.length}건`,
+    "pdf-summary": `PDF 텍스트 결과 ${activePdfTextResults.length}건`,
+    "drawing-intelligence": `도면 인덱스 ${drawingSheetIndexes.length}건 · 연결 후보 ${drawingReferences.length}건`,
+    "rebar-candidates": `철근 후보 ${activeRebarCandidates.length}건 · 승인 ${activeRebarCandidates.filter((candidate) => candidate.reviewStatus === "accepted").length}건`,
+    "rebar-standard": `승인 철근 적산 항목 ${approvedRebarEstimateItems.length}건`,
+    "drawing-candidates": `도면 분석 후보 ${visibleCandidates.length}건 · 승인 ${approvedEstimateCandidates.length}건`,
+    "approval-link": `승인 후보 ${approvedEstimateCandidates.length}건 · 매칭 대기 ${uploadedPdfPendingMatchCount}건`,
+    "standard-match": `표준품셈 자동 검토 ${automaticReviewMatches.length}건`,
+    "manual-match": `수동 표준품셈 검토 ${manualReviewMatches.length}건`,
+    "estimate-items": `적산내역 ${estimateItems.length}건`,
+    "manual-statement": `수기 단가 내역 ${manualEstimateStatementItems.length}건 · 산출 ${manualEstimateStatementSummary.calculatedCount}건`,
+    "schedule-forecast": `예상공정 ${scheduleForecast.items.length}건`,
+    "drawing-waiting": "도면 업로드 후 분석 흐름이 표시되는 대기 구역"
+  };
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-7xl px-4 py-6 text-foreground sm:px-6 lg:px-8">
@@ -1056,14 +1168,37 @@ export function EstimationDashboard() {
               도면 기반 수량산출과 견적서 기반 예상공정 초안을 확인합니다.
             </p>
           </div>
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-primary/10 text-primary">
-            <Sparkles className="h-5 w-5" />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              className="min-h-[38px] rounded-[13px] px-3 text-[12px]"
+              onClick={() => handleSetAllSectionsCompact(true)}
+              type="button"
+              variant="secondary"
+            >
+              <Minimize2 className="mr-1 h-4 w-4" />
+              전체 간략히
+            </Button>
+            <Button
+              className="min-h-[38px] rounded-[13px] px-3 text-[12px]"
+              onClick={() => handleSetAllSectionsCompact(false)}
+              type="button"
+              variant="ghost"
+            >
+              <Maximize2 className="mr-1 h-4 w-4" />
+              전체 펼치기
+            </Button>
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-primary/10 text-primary">
+              <Sparkles className="h-5 w-5" />
+            </div>
           </div>
         </div>
 
         <div className="mt-5 rounded-[14px] border border-border bg-[#f8fafc] px-4 py-3 text-[13px] leading-5 text-slate">
           <span className="font-semibold text-foreground">도면 업로드 및 분석 상태: </span>
           {projectFlowMessage}
+          <span className="ml-2 inline-flex rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate">
+            간략 보기 {compactSectionCount}/{compactDashboardSectionIds.length}
+          </span>
         </div>
       </section>
 
@@ -1088,100 +1223,204 @@ export function EstimationDashboard() {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         <aside className="space-y-5 lg:col-span-4">
-          <DrawingUploadPanel
-            drawingDataExists={drawingDataExists}
-            notice={notice}
-            onSelectFiles={handleDrawingUpload}
-          />
-          <UploadedDrawingFilesTable drawingFiles={drawingFiles} />
-          <PdfTextExtractionSummary results={activePdfTextResults} />
-          <DrawingIntelligencePanel
-            references={drawingReferences}
-            roadmaps={quantityRoadmaps}
-            sheets={drawingSheetIndexes}
-          />
+          <CompactDashboardSection
+            compact={Boolean(compactSections["drawing-upload"])}
+            id="drawing-upload"
+            onToggle={handleToggleCompactSection}
+            summary={sectionSummary["drawing-upload"]}
+            title="도면 업로드"
+          >
+            <DrawingUploadPanel
+              drawingDataExists={drawingDataExists}
+              notice={notice}
+              onSelectFiles={handleDrawingUpload}
+            />
+          </CompactDashboardSection>
+          <CompactDashboardSection
+            compact={Boolean(compactSections["uploaded-files"])}
+            id="uploaded-files"
+            onToggle={handleToggleCompactSection}
+            summary={sectionSummary["uploaded-files"]}
+            title="업로드 도면 목록"
+          >
+            <UploadedDrawingFilesTable drawingFiles={drawingFiles} />
+          </CompactDashboardSection>
+          <CompactDashboardSection
+            compact={Boolean(compactSections["pdf-summary"])}
+            id="pdf-summary"
+            onToggle={handleToggleCompactSection}
+            summary={sectionSummary["pdf-summary"]}
+            title="PDF 텍스트 추출"
+          >
+            <PdfTextExtractionSummary results={activePdfTextResults} />
+          </CompactDashboardSection>
+          <CompactDashboardSection
+            compact={Boolean(compactSections["drawing-intelligence"])}
+            id="drawing-intelligence"
+            onToggle={handleToggleCompactSection}
+            summary={sectionSummary["drawing-intelligence"]}
+            title="도면 지능 분석"
+          >
+            <DrawingIntelligencePanel
+              references={drawingReferences}
+              roadmaps={quantityRoadmaps}
+              sheets={drawingSheetIndexes}
+            />
+          </CompactDashboardSection>
         </aside>
 
         <main className="space-y-5 lg:col-span-8">
               {drawingDataExists ? (
                 <>
-                  <RebarQuantityReview
-                    candidates={activeRebarCandidates}
-                    drawingSheets={drawingSheetIndexes}
-                    onAddCandidate={handleAddRebarCandidate}
-                    onChangeCandidate={handleRebarCandidateChange}
-                    onChangeStatus={handleRebarCandidateStatusChange}
-                    onExportExcel={() => exportRebarQuantityCandidatesToExcel(activeRebarCandidates)}
-                    onRemoveCandidate={handleRemoveRebarCandidate}
-                  />
-                  <RebarStandardEstimatePanel approvedRebarItems={approvedRebarEstimateItems} />
-                  <DrawingExtractionTable
-                    candidates={visibleCandidates}
-                    onChangeStatus={handleCandidateStatusChange}
-                  />
-                  <Card className="bg-white shadow-sm">
-                    <SectionHeading
-                      title="승인 후보 연결 상태"
-                      description="승인된 적산 후보는 표준품셈 후보 매칭 영역에서 한 번 더 검토한 뒤 승인된 적산내역에 반영됩니다."
+                  <CompactDashboardSection
+                    compact={Boolean(compactSections["rebar-candidates"])}
+                    id="rebar-candidates"
+                    onToggle={handleToggleCompactSection}
+                    summary={sectionSummary["rebar-candidates"]}
+                    title="철근 수량산출 후보"
+                  >
+                    <RebarQuantityReview
+                      candidates={activeRebarCandidates}
+                      drawingSheets={drawingSheetIndexes}
+                      onAddCandidate={handleAddRebarCandidate}
+                      onChangeCandidate={handleRebarCandidateChange}
+                      onChangeStatus={handleRebarCandidateStatusChange}
+                      onExportExcel={() => exportRebarQuantityCandidatesToExcel(activeRebarCandidates)}
+                      onRemoveCandidate={handleRemoveRebarCandidate}
                     />
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                      <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
-                        <p className="text-[11px] font-medium text-slate">승인된 적산 후보</p>
-                        <p className="mt-1 text-[18px] font-bold text-foreground">
-                          {approvedEstimateCandidates.length}
-                        </p>
+                  </CompactDashboardSection>
+                  <CompactDashboardSection
+                    compact={Boolean(compactSections["rebar-standard"])}
+                    id="rebar-standard"
+                    onToggle={handleToggleCompactSection}
+                    summary={sectionSummary["rebar-standard"]}
+                    title="철근 품셈 적용 산출"
+                  >
+                    <RebarStandardEstimatePanel approvedRebarItems={approvedRebarEstimateItems} />
+                  </CompactDashboardSection>
+                  <CompactDashboardSection
+                    compact={Boolean(compactSections["drawing-candidates"])}
+                    id="drawing-candidates"
+                    onToggle={handleToggleCompactSection}
+                    summary={sectionSummary["drawing-candidates"]}
+                    title="도면 분석 결과 후보"
+                  >
+                    <DrawingExtractionTable
+                      candidates={visibleCandidates}
+                      onChangeStatus={handleCandidateStatusChange}
+                    />
+                  </CompactDashboardSection>
+                  <CompactDashboardSection
+                    compact={Boolean(compactSections["approval-link"])}
+                    id="approval-link"
+                    onToggle={handleToggleCompactSection}
+                    summary={sectionSummary["approval-link"]}
+                    title="승인 후보 연결 상태"
+                  >
+                    <Card className="bg-white shadow-sm">
+                      <SectionHeading
+                        title="승인 후보 연결 상태"
+                        description="승인된 적산 후보는 표준품셈 후보 매칭 영역에서 한 번 더 검토한 뒤 승인된 적산내역에 반영됩니다."
+                      />
+                      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
+                          <p className="text-[11px] font-medium text-slate">승인된 적산 후보</p>
+                          <p className="mt-1 text-[18px] font-bold text-foreground">
+                            {approvedEstimateCandidates.length}
+                          </p>
+                        </div>
+                        <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
+                          <p className="text-[11px] font-medium text-slate">표준품셈 매칭 대기</p>
+                          <p className="mt-1 text-[18px] font-bold text-foreground">
+                            {uploadedPdfPendingMatchCount}
+                          </p>
+                        </div>
+                        <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
+                          <p className="text-[11px] font-medium text-slate">표준품셈 매칭 승인</p>
+                          <p className="mt-1 text-[18px] font-bold text-foreground">
+                            {uploadedPdfAcceptedMatchCount}
+                          </p>
+                        </div>
+                        <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
+                          <p className="text-[11px] font-medium text-slate">적산내역 반영</p>
+                          <p className="mt-1 text-[18px] font-bold text-foreground">
+                            {reflectedUploadedPdfEstimateCount}
+                          </p>
+                        </div>
                       </div>
-                      <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
-                        <p className="text-[11px] font-medium text-slate">표준품셈 매칭 대기</p>
-                        <p className="mt-1 text-[18px] font-bold text-foreground">
-                          {uploadedPdfPendingMatchCount}
-                        </p>
-                      </div>
-                      <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
-                        <p className="text-[11px] font-medium text-slate">표준품셈 매칭 승인</p>
-                        <p className="mt-1 text-[18px] font-bold text-foreground">
-                          {uploadedPdfAcceptedMatchCount}
-                        </p>
-                      </div>
-                      <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
-                        <p className="text-[11px] font-medium text-slate">적산내역 반영</p>
-                        <p className="mt-1 text-[18px] font-bold text-foreground">
-                          {reflectedUploadedPdfEstimateCount}
-                        </p>
-                      </div>
-                    </div>
-                  </Card>
-                  <StandardMatchTable
-                    candidates={visibleCandidates}
-                    matches={automaticReviewMatches}
-                    onChangeStatus={handleMatchStatusChange}
-                    standardItems={seed.standardItems}
-                  />
-                  <ManualStandardMatchReview
-                    candidates={visibleCandidates}
-                    matches={manualReviewMatches}
-                    onApproveManualMatch={handleManualMatchApprove}
-                    onChangeStatus={handleManualMatchReviewStatusChange}
-                    options={manualMatchOptions}
-                  />
-                  <EstimateItemsTable
-                    items={estimateItems}
-                    onExportCsv={() => exportEstimateToCsv(estimateItems)}
-                    onExportExcel={() => exportEstimateToExcel(estimateItems)}
-                  />
-                  <ManualEstimateStatementTable
-                    items={manualEstimateStatementItems}
-                    onChangeUnitPrice={handleManualUnitPriceChange}
-                    onExportExcel={() =>
-                      exportManualEstimateStatementToExcel(manualEstimateStatementItems)
-                    }
-                    summary={manualEstimateStatementSummary}
-                    unitPriceInputs={manualUnitPriceInputs}
-                  />
-                  <ScheduleForecastDashboard
-                    items={scheduleForecast.items}
-                    summary={scheduleForecast.summary}
-                  />
+                    </Card>
+                  </CompactDashboardSection>
+                  <CompactDashboardSection
+                    compact={Boolean(compactSections["standard-match"])}
+                    id="standard-match"
+                    onToggle={handleToggleCompactSection}
+                    summary={sectionSummary["standard-match"]}
+                    title="표준품셈 후보 매칭"
+                  >
+                    <StandardMatchTable
+                      candidates={visibleCandidates}
+                      matches={automaticReviewMatches}
+                      onChangeStatus={handleMatchStatusChange}
+                      standardItems={seed.standardItems}
+                    />
+                  </CompactDashboardSection>
+                  <CompactDashboardSection
+                    compact={Boolean(compactSections["manual-match"])}
+                    id="manual-match"
+                    onToggle={handleToggleCompactSection}
+                    summary={sectionSummary["manual-match"]}
+                    title="수동 표준품셈 검토"
+                  >
+                    <ManualStandardMatchReview
+                      candidates={visibleCandidates}
+                      matches={manualReviewMatches}
+                      onApproveManualMatch={handleManualMatchApprove}
+                      onChangeStatus={handleManualMatchReviewStatusChange}
+                      options={manualMatchOptions}
+                    />
+                  </CompactDashboardSection>
+                  <CompactDashboardSection
+                    compact={Boolean(compactSections["estimate-items"])}
+                    id="estimate-items"
+                    onToggle={handleToggleCompactSection}
+                    summary={sectionSummary["estimate-items"]}
+                    title="승인 적산내역"
+                  >
+                    <EstimateItemsTable
+                      items={estimateItems}
+                      onExportCsv={() => exportEstimateToCsv(estimateItems)}
+                      onExportExcel={() => exportEstimateToExcel(estimateItems)}
+                    />
+                  </CompactDashboardSection>
+                  <CompactDashboardSection
+                    compact={Boolean(compactSections["manual-statement"])}
+                    id="manual-statement"
+                    onToggle={handleToggleCompactSection}
+                    summary={sectionSummary["manual-statement"]}
+                    title="수기 단가 적산내역서"
+                  >
+                    <ManualEstimateStatementTable
+                      items={manualEstimateStatementItems}
+                      onChangeUnitPrice={handleManualUnitPriceChange}
+                      onExportExcel={() =>
+                        exportManualEstimateStatementToExcel(manualEstimateStatementItems)
+                      }
+                      summary={manualEstimateStatementSummary}
+                      unitPriceInputs={manualUnitPriceInputs}
+                    />
+                  </CompactDashboardSection>
+                  <CompactDashboardSection
+                    compact={Boolean(compactSections["schedule-forecast"])}
+                    id="schedule-forecast"
+                    onToggle={handleToggleCompactSection}
+                    summary={sectionSummary["schedule-forecast"]}
+                    title="예상공정 대시보드"
+                  >
+                    <ScheduleForecastDashboard
+                      items={scheduleForecast.items}
+                      summary={scheduleForecast.summary}
+                    />
+                  </CompactDashboardSection>
                   <details className="rounded-[20px] border border-border bg-white px-4 py-4 shadow-sm">
                     <summary className="cursor-pointer text-[14px] font-bold text-foreground">
                       참고용 일위대가 자료
@@ -1211,22 +1450,38 @@ export function EstimationDashboard() {
                   </details>
                 </>
               ) : (
-                <Card className="bg-white shadow-sm">
-                  <SectionHeading
-                    title="도면 업로드 대기"
-                    description="PDF 도면을 업로드하면 도면 인덱스, 후보 검수, 표준품셈 매칭, 공사단가 입력 흐름이 이 영역에 표시됩니다."
-                  />
-                  <div className="rounded-[14px] border border-dashed border-border bg-[#f8fafc] px-4 py-6 text-[13px] leading-6 text-slate">
-                    이 프로젝트에는 아직 도면 데이터가 없습니다. 왼쪽 업로드 패널에서 PDF 도면을
-                    선택해 적산내역 초안 생성 흐름을 시작하세요.
-                  </div>
-                </Card>
+                <CompactDashboardSection
+                  compact={Boolean(compactSections["drawing-waiting"])}
+                  id="drawing-waiting"
+                  onToggle={handleToggleCompactSection}
+                  summary={sectionSummary["drawing-waiting"]}
+                  title="도면 업로드 대기"
+                >
+                  <Card className="bg-white shadow-sm">
+                    <SectionHeading
+                      title="도면 업로드 대기"
+                      description="PDF 도면을 업로드하면 도면 인덱스, 후보 검수, 표준품셈 매칭, 공사단가 입력 흐름이 이 영역에 표시됩니다."
+                    />
+                    <div className="rounded-[14px] border border-dashed border-border bg-[#f8fafc] px-4 py-6 text-[13px] leading-6 text-slate">
+                      이 프로젝트에는 아직 도면 데이터가 없습니다. 왼쪽 업로드 패널에서 PDF 도면을
+                      선택해 적산내역 초안 생성 흐름을 시작하세요.
+                    </div>
+                  </Card>
+                </CompactDashboardSection>
               )}
               {!drawingDataExists ? (
-                <ScheduleForecastDashboard
-                  items={scheduleForecast.items}
-                  summary={scheduleForecast.summary}
-                />
+                <CompactDashboardSection
+                  compact={Boolean(compactSections["schedule-forecast"])}
+                  id="schedule-forecast"
+                  onToggle={handleToggleCompactSection}
+                  summary={sectionSummary["schedule-forecast"]}
+                  title="예상공정 대시보드"
+                >
+                  <ScheduleForecastDashboard
+                    items={scheduleForecast.items}
+                    summary={scheduleForecast.summary}
+                  />
+                </CompactDashboardSection>
               ) : null}
         </main>
       </div>

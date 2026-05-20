@@ -106,7 +106,7 @@ describe("rebar member schedule parsing", () => {
 
     expect(hasCandidate(candidates, "NPC1", "D19", "column")).toBe(true);
     expect(hasCandidate(candidates, "NPC1", "D10", "column")).toBe(true);
-    expect(candidates.some((candidate) => /^(?:BP|NSC)/.test(candidate.memberName))).toBe(false);
+    expect(candidates.some((candidate) => /^(?:BP|NSC)/.test(candidate.memberName ?? ""))).toBe(false);
   });
 
   it("separates RC slab, deck slab, and following beam schedules", () => {
@@ -124,7 +124,7 @@ describe("rebar member schedule parsing", () => {
 
     expect(hasCandidate(candidates, "NF1", "D19", "footing")).toBe(true);
     expect(hasCandidate(candidates, "NF2", "D19", "footing")).toBe(true);
-    expect(candidates.some((candidate) => /^(?:BP|NSC)/.test(candidate.memberName))).toBe(false);
+    expect(candidates.some((candidate) => /^(?:BP|NSC)/.test(candidate.memberName ?? ""))).toBe(false);
   });
 
   it("classifies NMF1 as a slab inside an RC slab schedule", () => {
@@ -146,7 +146,7 @@ describe("rebar member schedule parsing", () => {
     const candidates = parseCandidates("foundation-count-with-baseplate.txt");
 
     expect(countByMemberType(candidates, "footing")).toBeGreaterThanOrEqual(2);
-    expect(candidates.some((candidate) => /^(?:BP|NSC)/.test(candidate.memberName))).toBe(false);
+    expect(candidates.some((candidate) => /^(?:BP|NSC)/.test(candidate.memberName ?? ""))).toBe(false);
   });
 
   it("keeps slab candidates when deck slab text appears on the same page", () => {
@@ -154,7 +154,7 @@ describe("rebar member schedule parsing", () => {
 
     expect(countByMemberType(candidates, "slab")).toBeGreaterThanOrEqual(2);
     expect(
-      candidates.some((candidate) => /^(?:DS|SD)/.test(candidate.memberName) && candidate.memberType === "slab")
+      candidates.some((candidate) => /^(?:DS|SD)/.test(candidate.memberName ?? "") && candidate.memberType === "slab")
     ).toBe(false);
   });
 
