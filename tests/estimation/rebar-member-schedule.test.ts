@@ -3,10 +3,15 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  buildFutureReviewRebarCandidatesFromPdfResults,
   buildRebarQuantityCandidatesFromMemberSchedules,
   extractRebarMemberScheduleFromText
 } from "@/lib/estimation/rebar-member-schedule";
-import type { DrawingSheetIndexRecord, RebarMemberType } from "@/lib/estimation/types";
+import type {
+  DrawingSheetIndexRecord,
+  PdfTextExtractionResult,
+  RebarMemberType
+} from "@/lib/estimation/types";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -18,12 +23,53 @@ function parseCandidates(
   fixtureName: string,
   sheetType: DrawingSheetIndexRecord["sheetType"] = "structural_schedule"
 ) {
-  const schedules = extractRebarMemberScheduleFromText(loadFixture(fixtureName), {
+  const schedules = parseSchedules(fixtureName, sheetType);
+
+  return buildRebarQuantityCandidatesFromMemberSchedules(schedules, fixtureName);
+}
+
+function parseSchedules(
+  fixtureName: string,
+  sheetType: DrawingSheetIndexRecord["sheetType"] = "structural_schedule"
+) {
+  return extractRebarMemberScheduleFromText(loadFixture(fixtureName), {
     fileName: fixtureName,
     sheetType
   });
+}
 
-  return buildRebarQuantityCandidatesFromMemberSchedules(schedules, fixtureName);
+function parseFutureReviewCandidates(fixtureName: string) {
+  const text = loadFixture(fixtureName);
+  const pdfResult: PdfTextExtractionResult = {
+    fileName: fixtureName,
+    pageCount: 1,
+    status: "success",
+    pages: [
+      {
+        id: `${fixtureName}-page-1`,
+        drawingFileId: fixtureName,
+        pageNumber: 1,
+        text,
+        textLength: text.length,
+        extractionStatus: "success"
+      }
+    ]
+  };
+  const sheet: DrawingSheetIndexRecord = {
+    id: `${fixtureName}-sheet-1`,
+    sourcePage: 1,
+    sourceFileName: fixtureName,
+    discipline: "rebar_concrete",
+    sheetType: "structural_schedule",
+    detectedKeywords: [],
+    quantityReadinessStatus: "schedule_based_calculation",
+    quantityReadinessReason: "Fixture text parse helper",
+    relatedSheetIds: [],
+    confidence: 0.9,
+    sourceTextSnippet: text.slice(0, 320)
+  };
+
+  return buildFutureReviewRebarCandidatesFromPdfResults([pdfResult], [sheet]);
 }
 
 function hasCandidate(
@@ -42,6 +88,16 @@ function hasCandidate(
 
 function countByMemberType(candidates: ReturnType<typeof parseCandidates>, memberType: RebarMemberType) {
   return candidates.filter((candidate) => candidate.memberType === memberType).length;
+}
+
+function hasSchedule(
+  schedules: ReturnType<typeof parseSchedules>,
+  memberName: string,
+  memberType: RebarMemberType
+) {
+  return schedules.some(
+    (schedule) => schedule.memberName === memberName && schedule.memberType === memberType
+  );
 }
 
 describe("rebar member schedule parsing", () => {
@@ -117,5 +173,84 @@ describe("rebar member schedule parsing", () => {
     expect(countByMemberType(candidates, "beam")).toBeGreaterThan(0);
     expect(countByMemberType(candidates, "column")).toBeGreaterThan(0);
     expect(countByMemberType(candidates, "wall")).toBe(0);
+  });
+
+  it("detects Gyeryong short beam schedules without pulling steel beam rows into RC", () => {
+    const schedules = parseSchedules("gyeryong-beam-short-title.txt");
+
+    expect(schedules.some((schedule) => schedule.memberName === "B3.85A" && schedule.memberType === "beam")).toBe(true);
+    expect(schedules.some((schedule) => schedule.memberName === "B5.7A" && schedule.memberType === "beam")).toBe(true);
+    expect(schedules.some((schedule) => schedule.memberName === "G7.5A" && schedule.memberType === "beam")).toBe(true);
+    expect(schedules.some((schedule) => schedule.memberName === "LB1" && schedule.memberType === "beam")).toBe(true);
+    expect(schedules.some((schedule) => /^(?:SB|SG)/.test(schedule.memberName))).toBe(false);
+  });
+
+  it("detects mixed foundation, column, and slab titles without an RC prefix", () => {
+    const candidates = parseCandidates("gyeryong-foundation-column-slab-title.txt");
+
+    expect(hasCandidate(candidates, "F1", "D19", "footing")).toBe(true);
+    expect(hasCandidate(candidates, "C1", "D22", "column")).toBe(true);
+    expect(hasCandidate(candidates, "C1", "D10", "column")).toBe(true);
+    expect(hasCandidate(candidates, "S1", "D13", "slab")).toBe(true);
+  });
+
+  it("separates wall schedules and stair follow-up candidates", () => {
+    const schedules = parseSchedules("gyeryong-wall-stair-title.txt");
+    const futureReviewCandidates = parseFutureReviewCandidates("gyeryong-wall-stair-title.txt");
+
+    expect(schedules.some((schedule) => schedule.memberName === "RW1" && schedule.memberType === "wall")).toBe(true);
+    expect(schedules.some((schedule) => schedule.memberName === "RW2" && schedule.memberType === "wall")).toBe(true);
+    expect(schedules.some((schedule) => schedule.memberName === "ST1")).toBe(false);
+    expect(
+      futureReviewCandidates.some(
+        (candidate) =>
+          candidate.memberName === "ST1" &&
+          candidate.memberType === "unknown" &&
+          candidate.memberListSource === "future_review" &&
+          /계단 배근도 기반 후보/.test(candidate.note ?? "")
+      )
+    ).toBe(true);
+  });
+
+  it("keeps RC roof schedules while excluding steel column and base plate rows", () => {
+    const schedules = parseSchedules("gyeryong-roof-schedule-mixed.txt");
+
+    expect(schedules.some((schedule) => schedule.memberName === "S1" && schedule.memberType === "slab")).toBe(true);
+    expect(schedules.some((schedule) => schedule.memberName === "S2" && schedule.memberType === "slab")).toBe(true);
+    expect(schedules.some((schedule) => schedule.memberName === "C1" && schedule.memberType === "column")).toBe(true);
+    expect(schedules.some((schedule) => schedule.memberName === "C2" && schedule.memberType === "column")).toBe(true);
+    expect(schedules.some((schedule) => schedule.memberName === "SC1")).toBe(false);
+    expect(schedules.some((schedule) => schedule.memberName === "B8.5B" && schedule.memberType === "beam")).toBe(true);
+    expect(schedules.some((schedule) => schedule.memberName === "G7.5A" && schedule.memberType === "beam")).toBe(true);
+    expect(schedules.some((schedule) => schedule.memberName === "BP1")).toBe(false);
+  });
+
+  it("parses mixed hanyang and gyeryong schedule corpus without losing RC candidates", () => {
+    const fixtureName = "corpus-mixed-hanyang-gyeryong-schedules.txt";
+    const schedules = parseSchedules(fixtureName);
+    const candidates = parseCandidates(fixtureName);
+
+    expect(countByMemberType(candidates, "beam")).toBeGreaterThan(0);
+    expect(countByMemberType(candidates, "column")).toBeGreaterThan(0);
+    expect(countByMemberType(candidates, "footing")).toBeGreaterThan(0);
+    expect(countByMemberType(candidates, "slab")).toBeGreaterThan(0);
+    expect(countByMemberType(candidates, "wall")).toBeGreaterThanOrEqual(0);
+
+    expect(hasCandidate(candidates, "1NFG1", "D22", "beam")).toBe(true);
+    expect(hasCandidate(candidates, "NPC1", "D19", "column")).toBe(true);
+    expect(candidates.some((candidate) => /^NF/.test(candidate.memberName ?? "") && candidate.memberType === "footing")).toBe(true);
+    expect(candidates.some((candidate) => /^(?:1NS|NMF)/.test(candidate.memberName ?? "") && candidate.memberType === "slab")).toBe(true);
+
+    expect(hasSchedule(schedules, "B3.85A", "beam") || hasSchedule(schedules, "G7.5A", "beam")).toBe(true);
+    expect(hasCandidate(candidates, "C1", "D22", "column")).toBe(true);
+    expect(hasCandidate(candidates, "S1", "D13", "slab") || hasSchedule(schedules, "S2", "slab")).toBe(true);
+    expect(hasSchedule(schedules, "RW1", "wall")).toBe(true);
+
+    expect(schedules.some((schedule) => /^(?:SB|SG|HB|SCG|SMTG|STB|BP|BPL)/.test(schedule.memberName))).toBe(false);
+    expect(
+      candidates.some((candidate) =>
+        /^(?:SB|SG|HB|SCG|SMTG|STB|BP|BPL)/.test(candidate.memberName ?? "")
+      )
+    ).toBe(false);
   });
 });
