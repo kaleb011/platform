@@ -1,6 +1,10 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { DrawingFileRecord, DrawingFileStatus } from "@/lib/estimation/types";
@@ -76,13 +80,48 @@ function getPageCountLabel(file: DrawingFileRecord): string {
   return "확인 예정";
 }
 
+function getSummary(drawingFiles: DrawingFileRecord[]) {
+  const pdfCount = drawingFiles.filter((file) => file.fileType === "pdf").length;
+  const analyzedCount = drawingFiles.filter((file) => file.status === "analyzed").length;
+  const convertedCount = drawingFiles.filter(
+    (file) => file.status === "converted" || file.status === "analyzed"
+  ).length;
+  const totalPages = drawingFiles.reduce(
+    (sum, file) => sum + (typeof file.pageCount === "number" ? file.pageCount : 0),
+    0
+  );
+
+  return { analyzedCount, convertedCount, pdfCount, totalPages };
+}
+
 export function UploadedDrawingFilesTable({ drawingFiles }: UploadedDrawingFilesTableProps) {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const summary = useMemo(() => getSummary(drawingFiles), [drawingFiles]);
+  const visibleFiles = detailOpen ? drawingFiles : drawingFiles.slice(0, 2);
+  const ToggleIcon = detailOpen ? ChevronDown : ChevronRight;
+
   return (
-    <Card className="section-enter">
+    <Card className="section-enter min-w-0 overflow-hidden">
       <SectionHeading
         title="업로드된 도면 목록"
         description="업로드한 도면의 파일 정보, 페이지 확인 상태, 다음 분석 작업을 확인합니다."
-        action={<Badge tone="blue">{drawingFiles.length}건</Badge>}
+        action={
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <Badge tone="blue">{drawingFiles.length}건</Badge>
+            {drawingFiles.length > 0 ? (
+              <Button
+                aria-expanded={detailOpen}
+                className="min-h-[32px] rounded-[11px] px-2 text-[11px]"
+                onClick={() => setDetailOpen((current) => !current)}
+                type="button"
+                variant="ghost"
+              >
+                <ToggleIcon className="mr-1 h-3.5 w-3.5" />
+                {detailOpen ? "간략히" : "상세"}
+              </Button>
+            ) : null}
+          </div>
+        }
       />
 
       {drawingFiles.length === 0 ? (
@@ -90,58 +129,85 @@ export function UploadedDrawingFilesTable({ drawingFiles }: UploadedDrawingFiles
           아직 업로드된 도면이 없습니다. PDF, PNG, JPG 도면을 선택하면 이 목록에 표시됩니다.
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-[920px] text-left">
-            <thead>
-              <tr className="border-b border-border text-[12px] text-slate">
-                <th className="px-2 py-3 font-medium">파일명</th>
-                <th className="px-2 py-3 font-medium">형식</th>
-                <th className="px-2 py-3 font-medium">크기</th>
-                <th className="px-2 py-3 font-medium">업로드 시간</th>
-                <th className="px-2 py-3 font-medium">상태</th>
-                <th className="px-2 py-3 font-medium">변환 상태</th>
-                <th className="px-2 py-3 font-medium">페이지 수</th>
-                <th className="px-2 py-3 font-medium">다음 작업</th>
-              </tr>
-            </thead>
-            <tbody>
-              {drawingFiles.map((file) => (
-                <tr key={file.id} className="border-b border-border/70 align-top">
-                  <td className="max-w-[220px] px-2 py-4 text-[13px] font-semibold text-foreground">
-                    <span className="block truncate">{file.fileName}</span>
+        <div className="grid min-w-0 gap-3">
+          <div className="grid grid-cols-2 gap-2 text-[11px] lg:grid-cols-4">
+            <div className="rounded-[14px] bg-[#f8fafc] px-3 py-2">
+              <p className="font-medium text-slate">PDF</p>
+              <p className="mt-1 text-[15px] font-bold text-foreground">{summary.pdfCount}</p>
+            </div>
+            <div className="rounded-[14px] bg-[#f8fafc] px-3 py-2">
+              <p className="font-medium text-slate">페이지</p>
+              <p className="mt-1 text-[15px] font-bold text-foreground">{summary.totalPages}</p>
+            </div>
+            <div className="rounded-[14px] bg-[#eef6ff] px-3 py-2">
+              <p className="font-medium text-slate">변환/분석</p>
+              <p className="mt-1 text-[15px] font-bold text-foreground">{summary.convertedCount}</p>
+            </div>
+            <div className="rounded-[14px] bg-[#e8f9ef] px-3 py-2">
+              <p className="font-medium text-slate">분석 완료</p>
+              <p className="mt-1 text-[15px] font-bold text-foreground">{summary.analyzedCount}</p>
+            </div>
+          </div>
+
+          <div className="grid min-w-0 gap-2">
+            {visibleFiles.map((file) => (
+              <article
+                className="min-w-0 rounded-[16px] border border-border bg-white px-3 py-3"
+                key={file.id}
+              >
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-bold text-foreground">
+                      {file.fileName}
+                    </p>
+                    <p className="mt-1 text-[11px] leading-4 text-slate">
+                      {file.fileType.toUpperCase()} · {file.fileSizeLabel} ·{" "}
+                      {formatUploadedAt(file.uploadedAt)}
+                    </p>
+                  </div>
+                  <Badge tone={statusToneMap[file.status]}>{statusLabelMap[file.status]}</Badge>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate">
+                  <div className="min-w-0 rounded-[12px] bg-[#f8fafc] px-2 py-2">
+                    <p className="font-medium">변환 상태</p>
+                    <p className="mt-1 break-words font-semibold text-foreground">
+                      {file.conversionStatus}
+                    </p>
+                  </div>
+                  <div className="min-w-0 rounded-[12px] bg-[#f8fafc] px-2 py-2">
+                    <p className="font-medium">페이지</p>
+                    <p className="mt-1 font-semibold text-foreground">{getPageCountLabel(file)}</p>
+                  </div>
+                </div>
+
+                {detailOpen ? (
+                  <div className="mt-3 grid gap-2 text-[11px] leading-4 text-slate">
                     {getUserMessage(file) ? (
-                      <span className="mt-1 block text-[11px] font-normal leading-4 text-slate">
+                      <p className="rounded-[12px] bg-[#f8fbf9] px-3 py-2">
                         {getUserMessage(file)}
-                      </span>
+                      </p>
                     ) : null}
+                    <p className="rounded-[12px] bg-[#f8fafc] px-3 py-2">
+                      다음 작업: {getNextAction(file)}
+                    </p>
                     {file.debugMessage ? (
-                      <details className="mt-2 text-[11px] font-normal leading-4 text-[#7a4a05]">
+                      <details className="rounded-[12px] bg-[#fff8ea] px-3 py-2 text-[#7a4a05]">
                         <summary className="cursor-pointer font-semibold">상세 로그 보기</summary>
                         <p className="mt-1 break-words">처리 로그: {file.debugMessage}</p>
                       </details>
                     ) : null}
-                  </td>
-                  <td className="px-2 py-4 text-[13px] uppercase text-foreground">
-                    {file.fileType}
-                  </td>
-                  <td className="px-2 py-4 text-[13px] text-foreground">{file.fileSizeLabel}</td>
-                  <td className="px-2 py-4 text-[13px] text-foreground">
-                    {formatUploadedAt(file.uploadedAt)}
-                  </td>
-                  <td className="px-2 py-4">
-                    <Badge tone={statusToneMap[file.status]}>{statusLabelMap[file.status]}</Badge>
-                  </td>
-                  <td className="px-2 py-4 text-[13px] text-foreground">
-                    {file.conversionStatus}
-                  </td>
-                  <td className="px-2 py-4 text-[13px] text-foreground">
-                    {getPageCountLabel(file)}
-                  </td>
-                  <td className="px-2 py-4 text-[13px] text-foreground">{getNextAction(file)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+
+          {!detailOpen && drawingFiles.length > visibleFiles.length ? (
+            <p className="rounded-[14px] border border-dashed border-border bg-[#f8fafc] px-3 py-2 text-[11px] leading-4 text-slate">
+              나머지 {drawingFiles.length - visibleFiles.length}건은 상세 보기에서 확인할 수 있습니다.
+            </p>
+          ) : null}
         </div>
       )}
     </Card>
