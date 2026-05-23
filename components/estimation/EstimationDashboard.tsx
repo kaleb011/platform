@@ -804,7 +804,7 @@ export function EstimationDashboard() {
       bendCorrectionMm: 0,
       lossRate: 0.03,
       faceCount: memberType === "wall" ? 2 : 1,
-      barCountRule: "floor_plus_one",
+      barCountRule: ["footing", "slab", "wall"].includes(memberType) ? "ceil_plus_one" : "direct",
       manualBarCount: memberType === "column" ? 8 : memberType === "beam" ? 4 : undefined,
       footingLayer: "top",
       memberCount: 1,

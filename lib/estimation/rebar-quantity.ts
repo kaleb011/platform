@@ -712,7 +712,7 @@ function createReviewCandidate(
     bendCorrectionMm: defaultBendCorrectionMm,
     lossRate: defaultLossRate,
     faceCount: defaultFaceCount,
-    barCountRule: "floor_plus_one",
+    barCountRule: spec.spacingMm ? "ceil_plus_one" : "direct",
     manualBarCount: spec.barCount,
     footingLayer: spec.position === "bottom" ? "bottom" : "top",
     memberCount: spec.memberCount ?? 1,
@@ -1062,7 +1062,7 @@ function resolveBeamStirrupSegmentCount(
   lengthMm: number,
   spacingMm: number | undefined,
   overrideCount: number | undefined,
-  includeStart: boolean
+  rule: "ceil_plus_one" | "floor"
 ) {
   const directCount = positiveOrDefault(overrideCount, 0);
 
@@ -1074,7 +1074,9 @@ function resolveBeamStirrupSegmentCount(
     return 0;
   }
 
-  return Math.floor(lengthMm / spacingMm) + (includeStart ? 1 : 0);
+  return rule === "ceil_plus_one"
+    ? Math.ceil(lengthMm / spacingMm) + 1
+    : Math.floor(lengthMm / spacingMm);
 }
 
 function getBeamStirrupSegmentBasis(candidate: RebarQuantityCandidateRecord) {
@@ -1244,7 +1246,7 @@ export function recalculateRebarQuantityCandidate(
   const bend = nonNegativeOrDefault(candidate.bendCorrectionMm, defaultBendCorrectionMm);
   const lossRate = nonNegativeOrDefault(candidate.lossRate, defaultLossRate);
   const faceCount = positiveOrDefault(candidate.faceCount, defaultFaceCount);
-  const barCountRule = candidate.barCountRule ?? "floor_plus_one";
+  const barCountRule = candidate.barCountRule ?? "ceil_plus_one";
   const manualBarCount = positiveOrDefault(candidate.manualBarCount, 0);
   const effectiveRole = getEffectiveRebarRole(candidate);
   const base: RebarQuantityCandidateRecord = {
@@ -1380,7 +1382,7 @@ export function recalculateRebarQuantityCandidate(
         return fail("보 늑근 산출에는 보 폭과 보 춤이 필요합니다.");
       }
 
-      if (candidate.beamStirrupCalculationMode === "segmented_spacing") {
+      if ((candidate.beamStirrupCalculationMode ?? "segmented_spacing") === "segmented_spacing") {
         const endZoneMode = candidate.beamStirrupEndZoneMode ?? "ratio";
         const endZoneRatio =
           typeof candidate.beamStirrupEndZoneRatio === "number" &&
@@ -1419,19 +1421,19 @@ export function recalculateRebarQuantityCandidate(
           leftEndLength,
           leftSpacing,
           candidate.beamStirrupLeftCountOverride,
-          true
+          "ceil_plus_one"
         );
         const centerCount = resolveBeamStirrupSegmentCount(
           centerLength,
           centerSpacing,
           candidate.beamStirrupCenterCountOverride,
-          false
+          "floor"
         );
         const rightCount = resolveBeamStirrupSegmentCount(
           rightEndLength,
           rightSpacing,
           candidate.beamStirrupRightCountOverride,
-          false
+          "ceil_plus_one"
         );
         const totalCount = leftCount + centerCount + rightCount;
         const unitLengthMm = Math.max(

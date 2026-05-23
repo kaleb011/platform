@@ -28,7 +28,7 @@ function createBeamStirrupCandidate(
     bendCorrectionMm: 0,
     lossRate: 0.03,
     faceCount: 1,
-    barCountRule: "floor_plus_one",
+    barCountRule: "ceil_plus_one",
     memberCount: 1,
     quantityKg: 0,
     quantityTon: 0,
@@ -90,6 +90,7 @@ describe("recalculateRebarQuantityCandidate beam role switching", () => {
   it("calculates beam stirrups without direct bar count", () => {
     const result = recalculateRebarQuantityCandidate(
       createBeamStirrupCandidate({
+        beamStirrupCalculationMode: "single_spacing",
         memberLengthMm: 2750,
         spacingMm: 200,
         manualBarCount: undefined,
@@ -98,7 +99,7 @@ describe("recalculateRebarQuantityCandidate beam role switching", () => {
     );
 
     expect(getEffectiveRebarRole(result)).toBe("stirrup");
-    expect(result.barCount).toBe(14);
+    expect(result.barCount).toBe(15);
     expect(result.quantityReviewRequired).toBe(false);
     expect(getMissingRebarRequiredInputLabels(result)).not.toContain("직접 본수");
   });
@@ -138,8 +139,8 @@ describe("recalculateRebarQuantityCandidate beam stirrup segmented spacing", () 
     expect(result.beamStirrupCenterLengthMm).toBe(3000);
     expect(result.beamStirrupLeftCount).toBe(16);
     expect(result.beamStirrupCenterCount).toBe(15);
-    expect(result.beamStirrupRightCount).toBe(15);
-    expect(result.beamStirrupTotalCount).toBe(46);
+    expect(result.beamStirrupRightCount).toBe(16);
+    expect(result.beamStirrupTotalCount).toBe(47);
     expect(result.quantityKg).toBeGreaterThan(0);
     expect(result.materialQuantityKg ?? 0).toBeGreaterThan(result.quantityKg);
     expect(result.quantityReviewRequired).toBe(false);
@@ -163,7 +164,7 @@ describe("recalculateRebarQuantityCandidate beam stirrup segmented spacing", () 
     expect(result.beamStirrupCenterLengthMm).toBe(3000);
     expect(result.beamStirrupLeftCount).toBe(13);
     expect(result.beamStirrupCenterCount).toBe(15);
-    expect(result.beamStirrupRightCount).toBe(12);
+    expect(result.beamStirrupRightCount).toBe(13);
   });
 
   it("uses two-depth end zones when selected", () => {

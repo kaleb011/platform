@@ -108,8 +108,8 @@ const positionLabel: Record<RebarPosition, string> = {
 const diameterOptions = ["D10", "D13", "D16", "D19", "D22", "D25", "D29", "D32"];
 
 const countRuleOptions: Array<{ value: RebarBarCountRule; label: string }> = [
-  { value: "floor_plus_one", label: "floor+1" },
   { value: "ceil_plus_one", label: "ceil+1" },
+  { value: "floor_plus_one", label: "floor+1" },
   { value: "direct", label: "직접 본수" }
 ];
 
@@ -780,7 +780,7 @@ function TemplateInputs({
   const isBeamMain = activeType === "beam" && effectiveRole === "main";
   const isBeamStirrup =
     activeType === "beam" && (effectiveRole === "stirrup" || effectiveRole === "shear");
-  const beamStirrupMode = candidate.beamStirrupCalculationMode ?? "single_spacing";
+  const beamStirrupMode = candidate.beamStirrupCalculationMode ?? "segmented_spacing";
   const beamStirrupEndZoneMode = candidate.beamStirrupEndZoneMode ?? "ratio";
   const beamStirrupRatio = candidate.beamStirrupEndZoneRatio ?? 0.25;
   const beamStirrupAutoEndSpacing = candidate.beamStirrupUseAutoEndSpacing !== false;
@@ -964,14 +964,16 @@ function TemplateInputs({
                 required
                 value={candidate.sectionDepthMm}
               />
-              <NumberInput
+              {beamStirrupMode === "single_spacing" ? (
+                <NumberInput
                 field="spacingMm"
                 label="늑근 간격 mm"
                 memberType={candidate.memberType}
                 missing={missing("철근 개수 또는 늑근 간격")}
                 onChange={(value) => onChange({ spacingMm: value })}
-                value={candidate.spacingMm}
-              />
+                  value={candidate.spacingMm}
+                />
+              ) : null}
             </>
           ) : null}
         </div>
@@ -1246,7 +1248,7 @@ function TemplateInputs({
       ) : null}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <NumberInput
+          <NumberInput
           field="manualBarCount"
           label="직접 본수"
           memberType={candidate.memberType}
@@ -1265,14 +1267,16 @@ function TemplateInputs({
           }
           value={candidate.manualBarCount}
         />
-        <SelectField
+        {!isBeamMain ? (
+          <SelectField
           field="barCountRule"
           label="본수 산정 방식"
           memberType={candidate.memberType}
           onChange={(value: RebarBarCountRule) => onChange({ barCountRule: value })}
           options={countRuleOptions}
-          value={candidate.barCountRule ?? "floor_plus_one"}
-        />
+          value={candidate.barCountRule ?? "ceil_plus_one"}
+          />
+        ) : null}
         <NumberInput
           field="memberCount"
           label="반복 개수"
@@ -1293,17 +1297,19 @@ function TemplateInputs({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <NumberInput
+      {!isBeamMain ? (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <NumberInput
           field="coverMm"
           label="피복 mm"
           memberType={candidate.memberType}
           missing={missing("피복")}
           onChange={(value) => onChange({ coverMm: value })}
-          required={!isBeamMain}
+          required
           value={candidate.coverMm}
-        />
-      </div>
+          />
+        </div>
+      ) : null}
 
       <section className="rounded-[14px] border border-border bg-[#f8fafc] px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">

@@ -1184,6 +1184,7 @@ export function buildRebarQuantityCandidatesFromMemberSchedules(
         memberName: schedule.memberName,
         memberType: schedule.memberType,
         position,
+        rebarRole: position === "stirrup" ? "stirrup" : position === "main" ? "main" : undefined,
         workCategory: "철근콘크리트공사",
         itemName: "철근 가공 및 조립",
         specification: [diameter, schedule.memberName, spec].join(" / "),
@@ -1207,7 +1208,7 @@ export function buildRebarQuantityCandidatesFromMemberSchedules(
         bendCorrectionMm: 0,
         lossRate: 0.03,
         faceCount: 1,
-        barCountRule: "floor_plus_one",
+        barCountRule: spacingPattern ? "ceil_plus_one" : "direct",
         footingLayer: "top",
         memberCount: 1,
         quantityKg: 0,
@@ -1312,6 +1313,12 @@ export function buildFutureReviewRebarCandidatesFromPdfResults(
               memberName,
               memberType,
               position: getPositionFromSpec(spec, memberType),
+              rebarRole:
+                getPositionFromSpec(spec, memberType) === "stirrup"
+                  ? "stirrup"
+                  : getPositionFromSpec(spec, memberType) === "main"
+                    ? "main"
+                    : undefined,
               workCategory: "철근콘크리트공사",
               itemName: "철근 가공 및 조립",
               specification: [diameter, memberName, spec].join(" / "),
@@ -1330,7 +1337,7 @@ export function buildFutureReviewRebarCandidatesFromPdfResults(
               bendCorrectionMm: 0,
               lossRate: 0.03,
               faceCount: 1,
-              barCountRule: "floor_plus_one",
+              barCountRule: spacingPattern ? "ceil_plus_one" : "direct",
               footingLayer: "top",
               memberCount: 1,
               quantityKg: 0,
@@ -1433,7 +1440,7 @@ export function buildPlanUnmatchedRebarCandidatesFromPdfResults(
             bendCorrectionMm: 0,
             lossRate: 0.03,
             faceCount: 2,
-            barCountRule: "floor_plus_one",
+            barCountRule: "ceil_plus_one",
             memberCount: 1,
             quantityKg: 0,
             quantityTon: 0,
