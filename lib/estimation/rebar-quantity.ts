@@ -1028,7 +1028,15 @@ export function getMissingRebarRequiredInputLabels(
     if (!hasPositiveInput(candidate.memberLengthMm)) missing.push("보 길이");
     if (!hasPositiveInput(candidate.sectionWidthMm)) missing.push("보 폭");
     if (!hasPositiveInput(candidate.sectionDepthMm)) missing.push("보 춤");
-    if (!hasSpacingOrDirectCount) missing.push("철근 개수 또는 늑근 간격");
+    if (candidate.position === "main") {
+      if (!hasPositiveInput(candidate.manualBarCount)) {
+        missing.push("철근 개수 또는 늑근 간격");
+      }
+    } else if (candidate.position === "stirrup") {
+      if (!hasSpacingOrDirectCount) missing.push("철근 개수 또는 늑근 간격");
+    } else if (!hasSpacingOrDirectCount) {
+      missing.push("철근 개수 또는 늑근 간격");
+    }
   }
 
   if (candidate.memberType === "column") {
@@ -1038,7 +1046,15 @@ export function getMissingRebarRequiredInputLabels(
     if (!hasPositiveInput(candidate.memberHeightMm)) missing.push("기둥 높이");
     if (!hasPositiveInput(candidate.sectionWidthMm)) missing.push("기둥 폭");
     if (!hasPositiveInput(candidate.sectionDepthMm)) missing.push("기둥 춤");
-    if (!hasSpacingOrDirectCount) missing.push("철근 개수 또는 띠철근 간격");
+    if (candidate.position === "main") {
+      if (!hasPositiveInput(candidate.manualBarCount)) {
+        missing.push("철근 개수 또는 띠철근 간격");
+      }
+    } else if (candidate.position === "tie") {
+      if (!hasSpacingOrDirectCount) missing.push("철근 개수 또는 띠철근 간격");
+    } else if (!hasSpacingOrDirectCount) {
+      missing.push("철근 개수 또는 띠철근 간격");
+    }
   }
 
   if (candidate.memberType === "slab") {
@@ -1089,7 +1105,7 @@ export function recalculateRebarQuantityCandidate(
   const lossRate = nonNegativeOrDefault(candidate.lossRate, defaultLossRate);
   const faceCount = positiveOrDefault(candidate.faceCount, defaultFaceCount);
   const barCountRule = candidate.barCountRule ?? "floor_plus_one";
-  const manualBarCount = positiveOrDefault(candidate.manualBarCount ?? candidate.barCount, 0);
+  const manualBarCount = positiveOrDefault(candidate.manualBarCount, 0);
   const base: RebarQuantityCandidateRecord = {
     ...candidate,
     unitWeightKgPerM: unitWeight,
@@ -1213,18 +1229,26 @@ export function recalculateRebarQuantityCandidate(
       return fail("보 산출에는 보 길이가 필요합니다.");
     }
 
-    const isStirrup = candidate.position === "stirrup" || Boolean(candidate.spacingMm && !candidate.barCount);
+    const isStirrup =
+      candidate.position === "stirrup" ||
+      (candidate.position === "unknown" && Boolean(candidate.spacingMm && !candidate.barCount));
 
     if (isStirrup) {
-      if (!candidate.spacingMm || !candidate.sectionWidthMm || !candidate.sectionDepthMm) {
-        return fail("보 늑근 산출에는 보 폭, 보 춤, 간격이 필요합니다.");
+      if (
+        !candidate.sectionWidthMm ||
+        !candidate.sectionDepthMm ||
+        (!candidate.spacingMm && manualBarCount <= 0)
+      ) {
+        return fail("보 늑근 산출에는 보 폭, 보 춤, 간격 또는 직접 본수가 필요합니다.");
       }
 
-      const barCount = resolveCountByRule(
-        candidate.memberLengthMm / candidate.spacingMm,
-        barCountRule,
-        manualBarCount
-      );
+      const barCount = candidate.spacingMm
+        ? resolveCountByRule(
+            candidate.memberLengthMm / candidate.spacingMm,
+            barCountRule,
+            manualBarCount
+          )
+        : manualBarCount;
       const singleBarLengthM = Math.max(
         0,
         2 * (candidate.sectionWidthMm - 2 * cover) +
@@ -1233,11 +1257,13 @@ export function recalculateRebarQuantityCandidate(
           bend -
           deduction
       ) / 1000;
-      const countPreview = getCountRulePreview(
-        `${candidate.memberLengthMm} / ${candidate.spacingMm}`,
-        barCountRule,
-        manualBarCount
-      );
+      const countPreview = candidate.spacingMm
+        ? getCountRulePreview(
+            `${candidate.memberLengthMm} / ${candidate.spacingMm}`,
+            barCountRule,
+            manualBarCount
+          )
+        : `직접입력 ${manualBarCount}`;
 
       return buildQuantityResult({
         base: { ...base, position: "stirrup" },
@@ -1271,18 +1297,26 @@ export function recalculateRebarQuantityCandidate(
       return fail("기둥 산출에는 기둥 높이가 필요합니다.");
     }
 
-    const isTie = candidate.position === "tie" || Boolean(candidate.spacingMm && !candidate.barCount);
+    const isTie =
+      candidate.position === "tie" ||
+      (candidate.position === "unknown" && Boolean(candidate.spacingMm && !candidate.barCount));
 
     if (isTie) {
-      if (!candidate.spacingMm || !candidate.sectionWidthMm || !candidate.sectionDepthMm) {
-        return fail("기둥 띠철근 산출에는 기둥 폭, 기둥 춤, 간격이 필요합니다.");
+      if (
+        !candidate.sectionWidthMm ||
+        !candidate.sectionDepthMm ||
+        (!candidate.spacingMm && manualBarCount <= 0)
+      ) {
+        return fail("기둥 띠철근 산출에는 기둥 폭, 기둥 춤, 간격 또는 직접 본수가 필요합니다.");
       }
 
-      const barCount = resolveCountByRule(
-        candidate.memberHeightMm / candidate.spacingMm,
-        barCountRule,
-        manualBarCount
-      );
+      const barCount = candidate.spacingMm
+        ? resolveCountByRule(
+            candidate.memberHeightMm / candidate.spacingMm,
+            barCountRule,
+            manualBarCount
+          )
+        : manualBarCount;
       const singleBarLengthM = Math.max(
         0,
         2 * (candidate.sectionWidthMm - 2 * cover) +
@@ -1291,11 +1325,13 @@ export function recalculateRebarQuantityCandidate(
           bend -
           deduction
       ) / 1000;
-      const countPreview = getCountRulePreview(
-        `${candidate.memberHeightMm} / ${candidate.spacingMm}`,
-        barCountRule,
-        manualBarCount
-      );
+      const countPreview = candidate.spacingMm
+        ? getCountRulePreview(
+            `${candidate.memberHeightMm} / ${candidate.spacingMm}`,
+            barCountRule,
+            manualBarCount
+          )
+        : `직접입력 ${manualBarCount}`;
 
       return buildQuantityResult({
         base: { ...base, position: "tie" },

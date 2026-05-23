@@ -112,6 +112,21 @@ const summaryIcons = {
 type SummaryCardKey = keyof typeof summaryIcons;
 type UnitPriceParseStatus = "idle" | "parsing" | "success" | "failed";
 
+function getRebarCandidateSourceKey(candidate: RebarQuantityCandidateRecord) {
+  return [
+    candidate.sourceFileName,
+    candidate.sourcePage,
+    candidate.scheduleMemberId,
+    candidate.sourceRebarSpecId,
+    candidate.memberListSource,
+    candidate.rawText,
+    candidate.diameter,
+    candidate.sourceTextSnippet
+  ]
+    .filter((value) => value !== undefined && value !== null && value !== "")
+    .join("|") || candidate.id;
+}
+
 const compactDashboardSectionIds = [
   "drawing-upload",
   "uploaded-files",
@@ -386,34 +401,10 @@ export function EstimationDashboard() {
     }
 
     setRebarCandidates((current) => {
-      const existingKeys = new Set(
-        current.map((candidate) =>
-          [
-            candidate.sourceFileName,
-            candidate.sourcePage,
-            candidate.memberName,
-            candidate.memberType,
-            candidate.position,
-            candidate.diameter,
-            candidate.barCount ?? "",
-            candidate.spacingMm ?? ""
-          ].join("|")
-        )
+      const existingKeys = new Set(current.map(getRebarCandidateSourceKey));
+      const missingCandidates = refreshedCandidates.filter(
+        (candidate) => !existingKeys.has(getRebarCandidateSourceKey(candidate))
       );
-      const missingCandidates = refreshedCandidates.filter((candidate) => {
-        const key = [
-          candidate.sourceFileName,
-          candidate.sourcePage,
-          candidate.memberName,
-          candidate.memberType,
-          candidate.position,
-          candidate.diameter,
-          candidate.barCount ?? "",
-          candidate.spacingMm ?? ""
-        ].join("|");
-
-        return !existingKeys.has(key);
-      });
 
       return missingCandidates.length > 0 ? [...missingCandidates, ...current] : current;
     });

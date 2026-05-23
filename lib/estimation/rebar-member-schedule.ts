@@ -1168,8 +1168,15 @@ export function buildRebarQuantityCandidatesFromMemberSchedules(
       const position = getPositionFromSpec(spec, schedule.memberType);
       const inferredSpec = isInferredRebarSpec(spec, schedule.sourceTextSnippet);
       const inferenceNote = inferredSpec ? "철근 표기 추정 검토 필요" : null;
+      const candidateId = createStableId([
+        schedule.id,
+        schedule.sourcePage,
+        index,
+        spec,
+        schedule.sourceTextSnippet
+      ]);
       const candidate: RebarQuantityCandidateRecord = {
-        id: `${schedule.id}-${index}`,
+        id: candidateId,
         scheduleMemberId: schedule.id,
         sourceFileName,
         sourcePage: schedule.sourcePage,

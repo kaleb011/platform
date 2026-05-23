@@ -749,6 +749,19 @@ function TemplateInputs({
   const missing = (label: string) => missingRequiredLabels.includes(label);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const advancedApplied = hasAdvancedAdjustments(candidate);
+  const handlePositionChange = (value: RebarPosition) => {
+    const updates: Partial<RebarQuantityCandidateRecord> = { position: value };
+
+    if ((activeType === "beam" || activeType === "column") && value !== candidate.position) {
+      updates.barCount = undefined;
+      updates.manualBarCount = undefined;
+      if (value !== "main" && candidate.barCountRule === "direct") {
+        updates.barCountRule = "floor_plus_one";
+      }
+    }
+
+    onChange(updates);
+  };
 
   return (
     <div className="grid gap-4">
@@ -782,7 +795,7 @@ function TemplateInputs({
             label={activeType === "footing" ? "방향" : "철근 종류"}
             memberType={candidate.memberType}
             missing={missing("방향 X/Y") || missing("철근 종류 주근/늑근") || missing("철근 종류 주근/띠철근") || missing("X/Y 방향 및 상부/하부") || missing("수직근/수평근")}
-            onChange={(value: RebarPosition) => onChange({ position: value })}
+            onChange={handlePositionChange}
             options={positionOptions}
             required
             value={
@@ -1023,8 +1036,14 @@ function TemplateInputs({
           label="직접 본수"
           memberType={candidate.memberType}
           missing={missing("철근 간격 또는 직접 본수") || missing("철근 개수 또는 늑근 간격") || missing("철근 개수 또는 띠철근 간격")}
-          onChange={(value) => onChange({ barCount: value, manualBarCount: value })}
-          value={candidate.manualBarCount ?? candidate.barCount}
+          onChange={(value) =>
+            onChange({
+              barCount: value,
+              manualBarCount: value,
+              barCountRule: value ? "direct" : candidate.barCountRule
+            })
+          }
+          value={candidate.manualBarCount}
         />
         <SelectField
           field="barCountRule"
