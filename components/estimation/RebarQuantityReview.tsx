@@ -61,7 +61,7 @@ type RebarQuantityReviewProps = {
   onChangeCandidate: (candidateId: string, updates: Partial<RebarQuantityCandidateRecord>) => void;
   onChangeStatus: (candidateId: string, reviewStatus: RebarReviewStatus) => void;
   onExportExcel?: () => void;
-  onRemoveCandidate?: (candidateId: string) => void;
+  onRemoveCandidate?: (candidate: RebarQuantityCandidateRecord) => void;
 };
 
 const memberTabs: Array<{ value: TemplateMemberType; label: string }> = [
@@ -1425,7 +1425,7 @@ export function RebarQuantityReview({
                   <Button
                     className="min-h-[36px] rounded-[12px] px-3 text-[12px]"
                     onClick={() => {
-                      onRemoveCandidate?.(selectedCandidate.id);
+                      onRemoveCandidate?.(selectedCandidate);
                       setSelectedId(undefined);
                     }}
                     variant="ghost"

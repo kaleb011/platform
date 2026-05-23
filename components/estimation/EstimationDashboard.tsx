@@ -277,6 +277,9 @@ export function EstimationDashboard() {
   const [matches, setMatches] = useState(() => seed.estimateItemMatches);
   const [pdfTextResults, setPdfTextResults] = useState<PdfTextExtractionResult[]>([]);
   const [rebarCandidates, setRebarCandidates] = useState<RebarQuantityCandidateRecord[]>([]);
+  const [removedRebarCandidateKeys, setRemovedRebarCandidateKeys] = useState<Set<string>>(
+    () => new Set()
+  );
   const [unitPrices, setUnitPrices] = useState<UnitPriceRecord[]>([]);
   const [unitPriceFileName, setUnitPriceFileName] = useState<string | null>(null);
   const [unitPriceParseStatus, setUnitPriceParseStatus] =
@@ -403,12 +406,16 @@ export function EstimationDashboard() {
     setRebarCandidates((current) => {
       const existingKeys = new Set(current.map(getRebarCandidateSourceKey));
       const missingCandidates = refreshedCandidates.filter(
-        (candidate) => !existingKeys.has(getRebarCandidateSourceKey(candidate))
+        (candidate) => {
+          const key = getRebarCandidateSourceKey(candidate);
+
+          return !existingKeys.has(key) && !removedRebarCandidateKeys.has(key);
+        }
       );
 
       return missingCandidates.length > 0 ? [...missingCandidates, ...current] : current;
     });
-  }, [activePdfTextResults, drawingSheetIndexes]);
+  }, [activePdfTextResults, drawingSheetIndexes, removedRebarCandidateKeys]);
 
   const standardEstimateItems = useMemo<EstimateItemRecord[]>(
     () =>
@@ -823,8 +830,16 @@ export function EstimationDashboard() {
     return id;
   };
 
-  const handleRemoveRebarCandidate = (candidateId: string) => {
-    setRebarCandidates((current) => current.filter((candidate) => candidate.id !== candidateId));
+  const handleRemoveRebarCandidate = (targetCandidate: RebarQuantityCandidateRecord) => {
+    const removedKey = getRebarCandidateSourceKey(targetCandidate);
+
+    setRemovedRebarCandidateKeys((current) => new Set(current).add(removedKey));
+    setRebarCandidates((current) =>
+      current.filter(
+        (candidate) =>
+          candidate.id !== targetCandidate.id && getRebarCandidateSourceKey(candidate) !== removedKey
+      )
+    );
     setNotice("선택한 철근 후보를 제거했습니다. 제거된 후보는 승인 물량과 품셈 산출에 반영되지 않습니다.");
   };
 
@@ -970,10 +985,15 @@ export function EstimationDashboard() {
           ...pdfCandidates,
           ...current.filter((candidate) => candidate.drawingFileId !== record.id)
         ]);
-        setRebarCandidates((current) => [
+        const generatedRebarCandidates = [
           ...nextRebarCandidates,
           ...unmatchedPlanRebarCandidates,
-          ...futureReviewRebarCandidates,
+          ...futureReviewRebarCandidates
+        ].filter(
+          (candidate) => !removedRebarCandidateKeys.has(getRebarCandidateSourceKey(candidate))
+        );
+        setRebarCandidates((current) => [
+          ...generatedRebarCandidates,
           ...current.filter((candidate) => candidate.sourceFileName !== linkedResult.fileName)
         ]);
         updateDrawingFileInActiveProject(record.id, {
