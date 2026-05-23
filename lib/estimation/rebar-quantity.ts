@@ -1,5 +1,6 @@
 import type {
   EstimateItemRecord,
+  BeamStirrupEndZoneMode,
   PdfTextExtractionResult,
   PdfPageTextRecord,
   RebarBarCountRule,
@@ -1001,6 +1002,65 @@ function hasWallReinforcementSnippet(candidate: RebarQuantityCandidateRecord) {
   return hasSpacing && hasDirection;
 }
 
+function isBeamStirrupCandidate(candidate: RebarQuantityCandidateRecord) {
+  return candidate.memberType === "beam" && candidate.position === "stirrup";
+}
+
+function resolveBeamStirrupEndLength(
+  mode: BeamStirrupEndZoneMode,
+  beamLengthMm: number,
+  beamDepthMm: number,
+  ratio: number,
+  manualLengthMm: number | undefined
+) {
+  if (mode === "manual") {
+    return nonNegativeOrDefault(manualLengthMm, 0);
+  }
+
+  if (mode === "two_depth") {
+    return hasPositiveInput(manualLengthMm) ? manualLengthMm ?? 0 : Math.max(0, beamDepthMm * 2);
+  }
+
+  return Math.max(0, beamLengthMm * ratio);
+}
+
+function resolveBeamStirrupSegmentCount(
+  lengthMm: number,
+  spacingMm: number | undefined,
+  overrideCount: number | undefined,
+  includeStart: boolean
+) {
+  const directCount = positiveOrDefault(overrideCount, 0);
+
+  if (directCount > 0) {
+    return directCount;
+  }
+
+  if (lengthMm <= 0 || !spacingMm || spacingMm <= 0) {
+    return 0;
+  }
+
+  return Math.floor(lengthMm / spacingMm) + (includeStart ? 1 : 0);
+}
+
+function getBeamStirrupSegmentBasis(candidate: RebarQuantityCandidateRecord) {
+  if (candidate.beamStirrupCalculationMode !== "segmented_spacing") return "";
+
+  return [
+    "보 늑근 산출 모드: 단부/중앙부 분리",
+    `좌측 단부 ${roundQuantity(candidate.beamStirrupLeftEndLengthMm ?? 0, 1)}mm / @${candidate.beamStirrupLeftSpacingMm ?? "-"} / ${candidate.beamStirrupLeftCount ?? 0}본`,
+    `중앙부 ${roundQuantity(candidate.beamStirrupCenterLengthMm ?? 0, 1)}mm / @${candidate.beamStirrupCenterSpacingMm ?? "-"} / ${candidate.beamStirrupCenterCount ?? 0}본`,
+    `우측 단부 ${roundQuantity(candidate.beamStirrupRightEndLengthMm ?? 0, 1)}mm / @${candidate.beamStirrupRightSpacingMm ?? "-"} / ${candidate.beamStirrupRightCount ?? 0}본`,
+    `총 늑근 본수 ${candidate.beamStirrupTotalCount ?? candidate.barCount ?? 0}본`,
+    candidate.beamStirrupUnitLengthMm
+      ? `늑근 1개 길이 ${roundQuantity(candidate.beamStirrupUnitLengthMm, 1)}mm`
+      : null,
+    candidate.beamStirrupSegmentNote
+  ]
+    .filter(Boolean)
+    .join(" / ");
+}
+
 export function isWallRebarDetailReviewRequired(candidate: RebarQuantityCandidateRecord) {
   return candidate.memberType === "wall" && !hasWallReinforcementSnippet(candidate);
 }
@@ -1028,7 +1088,47 @@ export function getMissingRebarRequiredInputLabels(
     if (!hasPositiveInput(candidate.memberLengthMm)) missing.push("보 길이");
     if (!hasPositiveInput(candidate.sectionWidthMm)) missing.push("보 폭");
     if (!hasPositiveInput(candidate.sectionDepthMm)) missing.push("보 춤");
-    if (candidate.position === "main") {
+    if (
+      isBeamStirrupCandidate(candidate) &&
+      candidate.beamStirrupCalculationMode === "segmented_spacing"
+    ) {
+      const endZoneMode = candidate.beamStirrupEndZoneMode ?? "ratio";
+      const centerSpacing = candidate.beamStirrupCenterSpacingMm ?? candidate.spacingMm;
+      const autoEndSpacing =
+        candidate.beamStirrupUseAutoEndSpacing !== false && hasPositiveInput(centerSpacing)
+          ? Math.max(1, Math.floor((centerSpacing ?? 0) / 2))
+          : undefined;
+      const leftSpacing = candidate.beamStirrupLeftSpacingMm ?? autoEndSpacing;
+      const rightSpacing = candidate.beamStirrupRightSpacingMm ?? autoEndSpacing;
+      const leftLength = candidate.beamStirrupLeftEndLengthMm;
+      const rightLength = candidate.beamStirrupRightEndLengthMm;
+      const centerLength = candidate.beamStirrupCenterLengthMm;
+
+      if (endZoneMode === "manual") {
+        if (!hasPositiveInput(leftLength)) missing.push("좌측 단부 길이");
+        if (!hasPositiveInput(rightLength)) missing.push("우측 단부 길이");
+      }
+      if (!hasPositiveInput(leftSpacing)) missing.push("좌측 단부 간격");
+      if (!hasPositiveInput(centerSpacing)) missing.push("중앙부 간격");
+      if (!hasPositiveInput(rightSpacing)) missing.push("우측 단부 간격");
+      if (
+        hasPositiveInput(candidate.memberLengthMm) &&
+        hasPositiveInput(leftLength) &&
+        hasPositiveInput(rightLength) &&
+        (leftLength ?? 0) + (rightLength ?? 0) > (candidate.memberLengthMm ?? 0)
+      ) {
+        missing.push("구간 길이 검토 필요");
+      }
+      if (
+        hasPositiveInput(candidate.memberLengthMm) &&
+        hasPositiveInput(leftLength) &&
+        hasPositiveInput(rightLength) &&
+        typeof centerLength === "number" &&
+        Math.abs((leftLength ?? 0) + centerLength + (rightLength ?? 0) - (candidate.memberLengthMm ?? 0)) > 1
+      ) {
+        missing.push("구간 길이 검토 필요");
+      }
+    } else if (candidate.position === "main") {
       if (!hasPositiveInput(candidate.manualBarCount)) {
         missing.push("철근 개수 또는 늑근 간격");
       }
@@ -1234,6 +1334,140 @@ export function recalculateRebarQuantityCandidate(
       (candidate.position === "unknown" && Boolean(candidate.spacingMm && !candidate.barCount));
 
     if (isStirrup) {
+      if (!candidate.sectionWidthMm || !candidate.sectionDepthMm) {
+        return fail("보 늑근 산출에는 보 폭과 보 춤이 필요합니다.");
+      }
+
+      if (candidate.beamStirrupCalculationMode === "segmented_spacing") {
+        const endZoneMode = candidate.beamStirrupEndZoneMode ?? "ratio";
+        const endZoneRatio =
+          typeof candidate.beamStirrupEndZoneRatio === "number" &&
+          Number.isFinite(candidate.beamStirrupEndZoneRatio) &&
+          candidate.beamStirrupEndZoneRatio >= 0
+            ? candidate.beamStirrupEndZoneRatio
+            : 0.25;
+        const centerSpacing = candidate.beamStirrupCenterSpacingMm ?? candidate.spacingMm;
+        const leftSpacing =
+          candidate.beamStirrupLeftSpacingMm ??
+          (candidate.beamStirrupUseAutoEndSpacing !== false && centerSpacing
+            ? Math.max(1, Math.floor(centerSpacing / 2))
+            : undefined);
+        const rightSpacing =
+          candidate.beamStirrupRightSpacingMm ??
+          (candidate.beamStirrupUseAutoEndSpacing !== false && centerSpacing
+            ? Math.max(1, Math.floor(centerSpacing / 2))
+            : undefined);
+        const leftEndLength = resolveBeamStirrupEndLength(
+          endZoneMode,
+          candidate.memberLengthMm,
+          candidate.sectionDepthMm,
+          endZoneRatio,
+          candidate.beamStirrupLeftEndLengthMm
+        );
+        const rightEndLength = resolveBeamStirrupEndLength(
+          endZoneMode,
+          candidate.memberLengthMm,
+          candidate.sectionDepthMm,
+          endZoneRatio,
+          candidate.beamStirrupRightEndLengthMm
+        );
+        const segmentLengthExceeded = leftEndLength + rightEndLength > candidate.memberLengthMm;
+        const centerLength = Math.max(0, candidate.memberLengthMm - leftEndLength - rightEndLength);
+        const leftCount = resolveBeamStirrupSegmentCount(
+          leftEndLength,
+          leftSpacing,
+          candidate.beamStirrupLeftCountOverride,
+          true
+        );
+        const centerCount = resolveBeamStirrupSegmentCount(
+          centerLength,
+          centerSpacing,
+          candidate.beamStirrupCenterCountOverride,
+          false
+        );
+        const rightCount = resolveBeamStirrupSegmentCount(
+          rightEndLength,
+          rightSpacing,
+          candidate.beamStirrupRightCountOverride,
+          false
+        );
+        const totalCount = leftCount + centerCount + rightCount;
+        const unitLengthMm = Math.max(
+          0,
+          2 * (candidate.sectionWidthMm - 2 * cover) +
+            2 * (candidate.sectionDepthMm - 2 * cover) +
+            hook +
+            bend
+        );
+        const singleBarLengthM = unitLengthMm / 1000;
+        const netWeightKg =
+          singleBarLengthM * totalCount * unitWeight * memberCount * faceCount;
+        const materialWeightKg = netWeightKg * (1 + lossRate);
+        const spacingMissing = !leftSpacing || !centerSpacing || !rightSpacing;
+        const invalid =
+          segmentLengthExceeded ||
+          spacingMissing ||
+          totalCount <= 0 ||
+          singleBarLengthM <= 0 ||
+          netWeightKg <= 0;
+        const segmentNote = [
+          segmentLengthExceeded ? "구간 길이 검토 필요" : null,
+          spacingMissing ? "단부/중앙부 간격 확인 필요" : null,
+          "단부/중앙부 구간 길이와 간격은 보 배근상세 및 구조평면도 확인 후 보정해야 합니다.",
+          "경계 중복 방지를 위해 좌측 단부는 시작 스터럽을 포함하고 중앙부/우측 단부는 floor(length / spacing)을 기본 적용합니다."
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+        return {
+          ...base,
+          position: "stirrup",
+          beamStirrupCalculationMode: "segmented_spacing",
+          beamStirrupEndZoneMode: endZoneMode,
+          beamStirrupEndZoneRatio: endZoneRatio,
+          beamStirrupLeftEndLengthMm: roundQuantity(leftEndLength, 1),
+          beamStirrupRightEndLengthMm: roundQuantity(rightEndLength, 1),
+          beamStirrupCenterLengthMm: roundQuantity(centerLength, 1),
+          beamStirrupLeftSpacingMm: leftSpacing,
+          beamStirrupCenterSpacingMm: centerSpacing,
+          beamStirrupRightSpacingMm: rightSpacing,
+          beamStirrupLeftCount: leftCount,
+          beamStirrupCenterCount: centerCount,
+          beamStirrupRightCount: rightCount,
+          beamStirrupTotalCount: totalCount,
+          beamStirrupUnitLengthMm: roundQuantity(unitLengthMm, 1),
+          beamStirrupSegmentNote: segmentNote,
+          barCount: totalCount,
+          singleBarLengthM: roundQuantity(singleBarLengthM, 3),
+          quantityKg: invalid ? 0 : roundQuantity(netWeightKg, 2),
+          quantityTon: invalid ? 0 : roundQuantity(netWeightKg / 1000, 4),
+          materialQuantityKg: invalid ? 0 : roundQuantity(materialWeightKg, 2),
+          materialQuantityTon: invalid ? 0 : roundQuantity(materialWeightKg / 1000, 4),
+          calculationFormula:
+            "보 늑근 구간별 산출 - " +
+            `좌측 단부: 길이 ${roundQuantity(leftEndLength, 1)}mm / 간격 ${leftSpacing ?? "-"}mm / 본수 ${leftCount}본, ` +
+            `중앙부: 길이 ${roundQuantity(centerLength, 1)}mm / 간격 ${centerSpacing ?? "-"}mm / 본수 ${centerCount}본, ` +
+            `우측 단부: 길이 ${roundQuantity(rightEndLength, 1)}mm / 간격 ${rightSpacing ?? "-"}mm / 본수 ${rightCount}본, ` +
+            `총 늑근 본수 ${totalCount}본, 늑근 1개 길이 [2x(보 폭 ${candidate.sectionWidthMm}-2x피복 ${cover})+2x(보 춤 ${candidate.sectionDepthMm}-2x피복 ${cover})+갈고리 ${hook}+절곡 ${bend}]/1000 = ${roundQuantity(singleBarLengthM, 3)}m, ` +
+            `정미중량 ${roundQuantity(singleBarLengthM, 3)}m x ${totalCount}본 x ${unitWeight}kg/m x ${memberCount}회 x ${faceCount}면 = ${roundQuantity(netWeightKg, 2)}kg, ` +
+            `자재중량 = 정미중량 x (1 + LOSS율 ${lossRate}) = ${roundQuantity(materialWeightKg, 2)}kg`,
+          calculationBasis: [
+            "보 늑근/스터럽: 단부 구간 + 중앙부 구간 분리 산출입니다.",
+            "좌측 단부는 floor(단부 길이 / 단부 간격) + 1, 중앙부와 우측 단부는 경계 중복 방지를 위해 floor(구간 길이 / 간격)을 기본 적용합니다.",
+            "직접 본수 override가 있으면 해당 구간 본수를 우선 사용합니다.",
+            "늑근 1개 길이 = 2x(보 폭-2피복)+2x(보 춤-2피복)+갈고리+절곡보정입니다.",
+            "정미중량은 늑근 1개 길이 x 총 본수 x 단위중량 x 반복개수 x 면수입니다.",
+            "자재중량은 정미중량 x (1 + LOSS율)입니다.",
+            segmentNote,
+            getGeneralRuleBasis(base)
+          ]
+            .filter(Boolean)
+            .join(" "),
+          quantityReviewRequired: invalid,
+          note: invalid ? "보 늑근 구간별 산출 조건 확인 필요" : "보 늑근 구간별 실무식 적용"
+        };
+      }
+
       if (
         !candidate.sectionWidthMm ||
         !candidate.sectionDepthMm ||
@@ -1632,6 +1866,7 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
         checklistTotal > 0 ? `체크리스트 ${checklistCompleted}/${checklistTotal}` : null;
       const wallDetailNote =
         recalculated.memberType === "wall" ? "배근 상세 확인 필요 / 사용자 보정값 기반" : null;
+      const beamStirrupSegmentBasis = getBeamStirrupSegmentBasis(recalculated);
 
       return {
         id: `rebar-estimate-${candidate.id}`,
@@ -1653,6 +1888,7 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
         sourceNote: [
           `정미중량(품셈 가공/조립 기준): ${quantityKg}kg`,
           recalculated.calculationBasis,
+          beamStirrupSegmentBasis,
           typeof recalculated.materialQuantityKg === "number"
             ? `자재중량(LOSS 포함): ${recalculated.materialQuantityKg}kg`
             : null,
@@ -1682,6 +1918,7 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
               reviewCompletenessLabel,
               recalculated.appliedGeneralRuleIds?.length ? "구조일반사항 추천값 참고" : null,
               recalculated.generalRuleReviewRequired ? "구조일반사항 표 확인 필요" : null,
+              beamStirrupSegmentBasis ? "보 늑근 단부/중앙부 분리 산출" : null,
               wallDetailNote
             ]
               .filter(Boolean)
@@ -1692,6 +1929,7 @@ export function createEstimateItemsFromAcceptedRebarCandidates(
               reviewCompletenessLabel,
               recalculated.appliedGeneralRuleIds?.length ? "구조일반사항 추천값 참고" : null,
               recalculated.generalRuleReviewRequired ? "구조일반사항 표 확인 필요" : null,
+              beamStirrupSegmentBasis ? "보 늑근 단부/중앙부 분리 산출" : null,
               wallDetailNote
             ]
               .filter(Boolean)

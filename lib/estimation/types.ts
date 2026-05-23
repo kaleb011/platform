@@ -78,6 +78,10 @@ export type RebarBarCountRule = "floor_plus_one" | "ceil_plus_one" | "direct";
 
 export type RebarFootingLayer = "top" | "bottom";
 
+export type BeamStirrupCalculationMode = "single_spacing" | "segmented_spacing";
+
+export type BeamStirrupEndZoneMode = "ratio" | "manual" | "two_depth";
+
 export type RebarReviewCompleteness = "complete" | "partial" | "not_started";
 
 export type RebarSourceType =
@@ -441,10 +445,29 @@ export interface RebarQuantityCandidateRecord {
   deductionLengthMm?: number;
   bendCorrectionMm?: number;
   lossRate?: number;
-  faceCount?: number;
-  barCountRule?: RebarBarCountRule;
-  manualBarCount?: number;
-  footingLayer?: RebarFootingLayer;
+    faceCount?: number;
+    barCountRule?: RebarBarCountRule;
+    manualBarCount?: number;
+    beamStirrupCalculationMode?: BeamStirrupCalculationMode;
+    beamStirrupEndZoneMode?: BeamStirrupEndZoneMode;
+    beamStirrupEndZoneRatio?: number;
+    beamStirrupLeftEndLengthMm?: number;
+    beamStirrupRightEndLengthMm?: number;
+    beamStirrupCenterLengthMm?: number;
+    beamStirrupLeftSpacingMm?: number;
+    beamStirrupCenterSpacingMm?: number;
+    beamStirrupRightSpacingMm?: number;
+    beamStirrupUseAutoEndSpacing?: boolean;
+    beamStirrupLeftCountOverride?: number;
+    beamStirrupCenterCountOverride?: number;
+    beamStirrupRightCountOverride?: number;
+    beamStirrupLeftCount?: number;
+    beamStirrupCenterCount?: number;
+    beamStirrupRightCount?: number;
+    beamStirrupTotalCount?: number;
+    beamStirrupUnitLengthMm?: number;
+    beamStirrupSegmentNote?: string;
+    footingLayer?: RebarFootingLayer;
   memberCount: number;
   singleBarLengthM?: number;
   quantityKg: number;

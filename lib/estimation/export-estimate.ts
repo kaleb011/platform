@@ -28,6 +28,24 @@ function hasAdvancedRebarAdjustments(candidate: RebarQuantityCandidateRecord) {
   ].some((value) => typeof value === "number" && value > 0);
 }
 
+function buildBeamStirrupSegmentExportNote(candidate: RebarQuantityCandidateRecord) {
+  if (candidate.beamStirrupCalculationMode !== "segmented_spacing") {
+    return candidate.beamStirrupCalculationMode === "single_spacing" ? "단일 간격" : "";
+  }
+
+  return [
+    "단부/중앙부 분리",
+    `좌측 ${candidate.beamStirrupLeftEndLengthMm ?? ""}mm / @${candidate.beamStirrupLeftSpacingMm ?? ""} / ${candidate.beamStirrupLeftCount ?? ""}본`,
+    `중앙 ${candidate.beamStirrupCenterLengthMm ?? ""}mm / @${candidate.beamStirrupCenterSpacingMm ?? ""} / ${candidate.beamStirrupCenterCount ?? ""}본`,
+    `우측 ${candidate.beamStirrupRightEndLengthMm ?? ""}mm / @${candidate.beamStirrupRightSpacingMm ?? ""} / ${candidate.beamStirrupRightCount ?? ""}본`,
+    `총 ${candidate.beamStirrupTotalCount ?? candidate.barCount ?? ""}본`,
+    `1개 길이 ${candidate.beamStirrupUnitLengthMm ?? ""}mm`,
+    candidate.beamStirrupSegmentNote ?? ""
+  ]
+    .filter(Boolean)
+    .join(" / ");
+}
+
 function getExportQuantity(item: EstimateItemRecord): string | number {
   return item.quantityReviewRequired || item.quantity <= 0 ? "검토 필요" : item.quantity;
 }
@@ -415,6 +433,13 @@ export function exportRebarQuantityCandidatesToExcel(
     "철근 규격",
     "철근 개수",
     "간격",
+    "보 늑근 산출 모드",
+    "보 늑근 좌측 단부",
+    "보 늑근 중앙부",
+    "보 늑근 우측 단부",
+    "보 늑근 총 본수",
+    "보 늑근 1개 길이 mm",
+    "보 늑근 구간 검토",
     "단위중량",
     "1본 길이 m",
     "길이/높이/기초치수",
@@ -465,6 +490,7 @@ export function exportRebarQuantityCandidatesToExcel(
       const checklist = getChecklistCompletion(candidate);
       const followUpRequired = candidate.quantityReviewRequired || completeness !== "complete";
       const advancedApplied = hasAdvancedRebarAdjustments(candidate);
+      const beamStirrupSegmentNote = buildBeamStirrupSegmentExportNote(candidate);
 
       return `
         <tr>
@@ -474,6 +500,13 @@ export function exportRebarQuantityCandidatesToExcel(
           <td>${escapeHtml(candidate.diameter)}</td>
           <td>${escapeHtml(candidate.barCount ?? "")}</td>
           <td>${escapeHtml(candidate.spacingMm ? `@${candidate.spacingMm}` : "")}</td>
+          <td>${escapeHtml(candidate.beamStirrupCalculationMode ?? "")}</td>
+          <td>${escapeHtml(candidate.beamStirrupCalculationMode === "segmented_spacing" ? `${candidate.beamStirrupLeftEndLengthMm ?? ""}mm / @${candidate.beamStirrupLeftSpacingMm ?? ""} / ${candidate.beamStirrupLeftCount ?? ""}본` : "")}</td>
+          <td>${escapeHtml(candidate.beamStirrupCalculationMode === "segmented_spacing" ? `${candidate.beamStirrupCenterLengthMm ?? ""}mm / @${candidate.beamStirrupCenterSpacingMm ?? ""} / ${candidate.beamStirrupCenterCount ?? ""}본` : "")}</td>
+          <td>${escapeHtml(candidate.beamStirrupCalculationMode === "segmented_spacing" ? `${candidate.beamStirrupRightEndLengthMm ?? ""}mm / @${candidate.beamStirrupRightSpacingMm ?? ""} / ${candidate.beamStirrupRightCount ?? ""}본` : "")}</td>
+          <td>${escapeHtml(candidate.beamStirrupTotalCount ?? "")}</td>
+          <td>${escapeHtml(candidate.beamStirrupUnitLengthMm ?? "")}</td>
+          <td>${escapeHtml(beamStirrupSegmentNote)}</td>
           <td>${escapeHtml(candidate.unitWeightKgPerM)}</td>
           <td>${escapeHtml(candidate.singleBarLengthM ?? "")}</td>
           <td>${escapeHtml(sizeLabel)}</td>

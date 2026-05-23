@@ -56,12 +56,35 @@ export const rebarChecklistItems: Record<Exclude<RebarMemberType, "unknown">, Re
   ]
 };
 
-export function getRebarChecklistItems(memberType: RebarMemberType) {
-  return memberType === "unknown" ? [] : rebarChecklistItems[memberType];
+export function getRebarChecklistItems(
+  memberType: RebarMemberType,
+  candidate?: RebarQuantityCandidateRecord
+) {
+  if (memberType === "unknown") return [];
+
+  const items = rebarChecklistItems[memberType];
+
+  if (
+    memberType !== "beam" ||
+    candidate?.position !== "stirrup" ||
+    candidate.beamStirrupCalculationMode !== "segmented_spacing"
+  ) {
+    return items;
+  }
+
+  return [
+    ...items,
+    { id: "beam-stirrup-end-length", label: "보 스터럽 단부 구간 길이 확인" },
+    { id: "beam-stirrup-center-length", label: "보 스터럽 중앙부 길이 확인" },
+    { id: "beam-stirrup-end-spacing", label: "단부 간격 확인" },
+    { id: "beam-stirrup-center-spacing", label: "중앙부 간격 확인" },
+    { id: "beam-stirrup-boundary-count", label: "경계 중복 본수 검토" },
+    { id: "beam-stirrup-seismic-detail", label: "내진상세 적용 여부 확인" }
+  ];
 }
 
 export function getChecklistCompletion(candidate: RebarQuantityCandidateRecord) {
-  const items = getRebarChecklistItems(candidate.memberType);
+  const items = getRebarChecklistItems(candidate.memberType, candidate);
   const checklist = candidate.reviewChecklist ?? {};
   const completed = items.filter((item) => checklist[item.id]).length;
   const total = items.length;

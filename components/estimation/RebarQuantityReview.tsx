@@ -42,6 +42,8 @@ import {
 } from "@/lib/estimation/rebar-evidence";
 import type {
   DrawingSheetIndexRecord,
+  BeamStirrupCalculationMode,
+  BeamStirrupEndZoneMode,
   RebarBarCountRule,
   RebarDetailAdjustmentPreset,
   RebarFootingLayer,
@@ -108,6 +110,20 @@ const countRuleOptions: Array<{ value: RebarBarCountRule; label: string }> = [
   { value: "floor_plus_one", label: "floor+1" },
   { value: "ceil_plus_one", label: "ceil+1" },
   { value: "direct", label: "직접 본수" }
+];
+
+const beamStirrupCalculationModeOptions: Array<{
+  value: BeamStirrupCalculationMode;
+  label: string;
+}> = [
+  { value: "single_spacing", label: "단일 간격" },
+  { value: "segmented_spacing", label: "단부·중앙부 분리" }
+];
+
+const beamStirrupEndZoneModeOptions: Array<{ value: BeamStirrupEndZoneMode; label: string }> = [
+  { value: "ratio", label: "비율" },
+  { value: "manual", label: "직접 입력" },
+  { value: "two_depth", label: "2D" }
 ];
 
 const reviewToneMap: Record<RebarReviewStatus, BadgeTone> = {
@@ -749,6 +765,39 @@ function TemplateInputs({
   const missing = (label: string) => missingRequiredLabels.includes(label);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const advancedApplied = hasAdvancedAdjustments(candidate);
+  const isBeamStirrup = activeType === "beam" && candidate.position === "stirrup";
+  const beamStirrupMode = candidate.beamStirrupCalculationMode ?? "single_spacing";
+  const beamStirrupEndZoneMode = candidate.beamStirrupEndZoneMode ?? "ratio";
+  const beamStirrupRatio = candidate.beamStirrupEndZoneRatio ?? 0.25;
+  const beamStirrupAutoEndSpacing = candidate.beamStirrupUseAutoEndSpacing !== false;
+  const beamStirrupCenterSpacing = candidate.beamStirrupCenterSpacingMm ?? candidate.spacingMm;
+  const suggestedEndSpacing = beamStirrupCenterSpacing
+    ? Math.max(1, Math.floor(beamStirrupCenterSpacing / 2))
+    : undefined;
+  const derivedLeftEndLength =
+    beamStirrupEndZoneMode === "ratio"
+      ? candidate.memberLengthMm
+        ? candidate.memberLengthMm * beamStirrupRatio
+        : undefined
+      : beamStirrupEndZoneMode === "two_depth"
+        ? candidate.beamStirrupLeftEndLengthMm ??
+          (candidate.sectionDepthMm ? candidate.sectionDepthMm * 2 : undefined)
+        : candidate.beamStirrupLeftEndLengthMm;
+  const derivedRightEndLength =
+    beamStirrupEndZoneMode === "ratio"
+      ? candidate.memberLengthMm
+        ? candidate.memberLengthMm * beamStirrupRatio
+        : undefined
+      : beamStirrupEndZoneMode === "two_depth"
+        ? candidate.beamStirrupRightEndLengthMm ??
+          (candidate.sectionDepthMm ? candidate.sectionDepthMm * 2 : undefined)
+        : candidate.beamStirrupRightEndLengthMm;
+  const derivedCenterLength =
+    typeof candidate.memberLengthMm === "number" &&
+    typeof derivedLeftEndLength === "number" &&
+    typeof derivedRightEndLength === "number"
+      ? Math.max(0, candidate.memberLengthMm - derivedLeftEndLength - derivedRightEndLength)
+      : undefined;
   const handlePositionChange = (value: RebarPosition) => {
     const updates: Partial<RebarQuantityCandidateRecord> = { position: value };
 
@@ -761,6 +810,18 @@ function TemplateInputs({
     }
 
     onChange(updates);
+  };
+  const handleBeamStirrupCenterSpacingChange = (value: number | undefined) => {
+    onChange({
+      spacingMm: value,
+      beamStirrupCenterSpacingMm: value,
+      ...(beamStirrupAutoEndSpacing && value
+        ? {
+            beamStirrupLeftSpacingMm: Math.max(1, Math.floor(value / 2)),
+            beamStirrupRightSpacingMm: Math.max(1, Math.floor(value / 2))
+          }
+        : {})
+    });
   };
 
   return (
@@ -896,6 +957,142 @@ function TemplateInputs({
             value={candidate.spacingMm}
           />
         </div>
+      ) : null}
+
+      {isBeamStirrup ? (
+        <section className="grid gap-3 rounded-[14px] border border-[#b7d9ff] bg-[#f4f9ff] px-4 py-4">
+          <div>
+            <p className="text-[13px] font-bold text-foreground">보 늑근/스터럽 구간별 산출</p>
+            <p className="mt-1 text-[11px] leading-5 text-slate">
+              구조일반사항 S-007의 보 배근 상세는 단부와 중앙부의 스터럽 간격을 구분합니다. 단부 구간은 보통 0.25L 또는 도면 지정 구간을 기준으로 하며, 중앙부와 다른 간격을 적용할 수 있습니다. 실제 적용 구간은 구조평면도와 보 배근상세를 확인해 보정하세요.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <SelectField
+              field="beamStirrupCalculationMode"
+              label="산출 모드"
+              memberType={candidate.memberType}
+              onChange={(value: BeamStirrupCalculationMode) =>
+                onChange({ beamStirrupCalculationMode: value })
+              }
+              options={beamStirrupCalculationModeOptions}
+              value={beamStirrupMode}
+            />
+            {beamStirrupMode === "segmented_spacing" ? (
+              <>
+                <SelectField
+                  field="beamStirrupEndZoneMode"
+                  label="단부 구간 산정 방식"
+                  memberType={candidate.memberType}
+                  onChange={(value: BeamStirrupEndZoneMode) =>
+                    onChange({ beamStirrupEndZoneMode: value })
+                  }
+                  options={beamStirrupEndZoneModeOptions}
+                  value={beamStirrupEndZoneMode}
+                />
+                <NumberInput
+                  field="beamStirrupEndZoneRatio"
+                  label="단부 구간 비율"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamStirrupEndZoneRatio: value ?? 0.25 })}
+                  value={beamStirrupRatio}
+                />
+                <Field label="단부 간격 자동 제안" source="사용자 판단값">
+                  <label className="mt-1 flex h-10 items-center gap-2 rounded-[10px] border border-border bg-white px-3 text-[12px] font-semibold text-foreground">
+                    <input
+                      checked={beamStirrupAutoEndSpacing}
+                      onChange={(event) =>
+                        onChange({
+                          beamStirrupUseAutoEndSpacing: event.target.checked,
+                          ...(event.target.checked && suggestedEndSpacing
+                            ? {
+                                beamStirrupLeftSpacingMm: suggestedEndSpacing,
+                                beamStirrupRightSpacingMm: suggestedEndSpacing
+                              }
+                            : {})
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    중앙부 S 입력 시 단부 S/2 제안
+                  </label>
+                </Field>
+                <NumberInput
+                  field="beamStirrupLeftEndLengthMm"
+                  label="좌측 단부 길이 mm"
+                  memberType={candidate.memberType}
+                  missing={missing("좌측 단부 길이") || missing("구간 길이 검토 필요")}
+                  onChange={(value) => onChange({ beamStirrupLeftEndLengthMm: value })}
+                  value={derivedLeftEndLength}
+                />
+                <NumberInput
+                  field="beamStirrupRightEndLengthMm"
+                  label="우측 단부 길이 mm"
+                  memberType={candidate.memberType}
+                  missing={missing("우측 단부 길이") || missing("구간 길이 검토 필요")}
+                  onChange={(value) => onChange({ beamStirrupRightEndLengthMm: value })}
+                  value={derivedRightEndLength}
+                />
+                <Field
+                  label="중앙부 길이 mm"
+                  missing={missing("구간 길이 검토 필요")}
+                  source="자동 계산값"
+                >
+                  <input
+                    className="mt-1 h-10 w-full rounded-[10px] border border-border bg-[#f8fafc] px-3 text-right text-[13px] font-semibold text-foreground"
+                    disabled
+                    value={derivedCenterLength ?? ""}
+                  />
+                </Field>
+                <NumberInput
+                  field="beamStirrupLeftSpacingMm"
+                  label="좌측 단부 간격 mm"
+                  memberType={candidate.memberType}
+                  missing={missing("좌측 단부 간격")}
+                  onChange={(value) => onChange({ beamStirrupLeftSpacingMm: value })}
+                  value={candidate.beamStirrupLeftSpacingMm ?? suggestedEndSpacing}
+                />
+                <NumberInput
+                  field="beamStirrupCenterSpacingMm"
+                  label="중앙부 간격 mm"
+                  memberType={candidate.memberType}
+                  missing={missing("중앙부 간격")}
+                  onChange={handleBeamStirrupCenterSpacingChange}
+                  value={beamStirrupCenterSpacing}
+                />
+                <NumberInput
+                  field="beamStirrupRightSpacingMm"
+                  label="우측 단부 간격 mm"
+                  memberType={candidate.memberType}
+                  missing={missing("우측 단부 간격")}
+                  onChange={(value) => onChange({ beamStirrupRightSpacingMm: value })}
+                  value={candidate.beamStirrupRightSpacingMm ?? suggestedEndSpacing}
+                />
+                <NumberInput
+                  field="beamStirrupLeftCountOverride"
+                  label="좌측 단부 본수 override"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamStirrupLeftCountOverride: value })}
+                  value={candidate.beamStirrupLeftCountOverride}
+                />
+                <NumberInput
+                  field="beamStirrupCenterCountOverride"
+                  label="중앙부 본수 override"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamStirrupCenterCountOverride: value })}
+                  value={candidate.beamStirrupCenterCountOverride}
+                />
+                <NumberInput
+                  field="beamStirrupRightCountOverride"
+                  label="우측 단부 본수 override"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamStirrupRightCountOverride: value })}
+                  value={candidate.beamStirrupRightCountOverride}
+                />
+              </>
+            ) : null}
+          </div>
+        </section>
       ) : null}
 
       {activeType === "column" ? (

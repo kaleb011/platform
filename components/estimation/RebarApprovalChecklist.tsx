@@ -13,7 +13,7 @@ type RebarApprovalChecklistProps = {
 };
 
 export function RebarApprovalChecklist({ candidate, onChange }: RebarApprovalChecklistProps) {
-  const items = getRebarChecklistItems(candidate.memberType);
+  const items = getRebarChecklistItems(candidate.memberType, candidate);
   const checklist = candidate.reviewChecklist ?? {};
   const completion = getChecklistCompletion(candidate);
   const completeness = candidate.reviewCompleteness ?? resolveReviewCompleteness(candidate);
