@@ -7,6 +7,7 @@ import type {
   RebarMemberType,
   RebarPosition,
   RebarQuantityCandidateRecord,
+  RebarRole,
   RebarQuantitySummary,
   RebarReviewStatus,
   RebarSourceType,
@@ -994,6 +995,37 @@ function hasPositiveInput(value: number | undefined) {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
+export function normalizeRebarRole(value: unknown): RebarRole {
+  if (typeof value !== "string") return "unknown";
+
+  const normalized = value.trim().toUpperCase().replace(/\s+/g, "");
+
+  if (!normalized) return "unknown";
+  if (/^(MAIN|MAIN_BAR|주근|상부근|하부근|TOP|BOTTOM)$/.test(normalized)) return "main";
+  if (/^(STIRRUP|HOOP|TIE|늑근|스터럽|띠철근)$/.test(normalized)) return "stirrup";
+  if (/^(SHEAR|전단근|전단철근)$/.test(normalized)) return "shear";
+  if (/^\d{1,3}[- ]?(?:H?D)?\d{2}$/.test(normalized)) return "main";
+  if (/@/.test(normalized) || /STIRRUP|늑근|스터럽|전단철근|전단근/i.test(value)) {
+    return /전단|SHEAR/i.test(value) ? "shear" : "stirrup";
+  }
+
+  return "unknown";
+}
+
+export function getEffectiveRebarRole(candidate: RebarQuantityCandidateRecord): RebarRole {
+  return [
+    candidate.rebarRole,
+    candidate.position,
+    candidate.originalRole,
+    candidate.rawText,
+    candidate.sourceTextSnippet
+  ].reduce<RebarRole>((role, value) => {
+    if (role !== "unknown") return role;
+
+    return normalizeRebarRole(value);
+  }, "unknown");
+}
+
 function hasWallReinforcementSnippet(candidate: RebarQuantityCandidateRecord) {
   const snippet = candidate.sourceTextSnippet ?? candidate.rawText ?? "";
   const hasSpacing = parseRebarSpacingPattern(snippet).length > 0;
@@ -1003,7 +1035,9 @@ function hasWallReinforcementSnippet(candidate: RebarQuantityCandidateRecord) {
 }
 
 function isBeamStirrupCandidate(candidate: RebarQuantityCandidateRecord) {
-  return candidate.memberType === "beam" && candidate.position === "stirrup";
+  const role = getEffectiveRebarRole(candidate);
+
+  return candidate.memberType === "beam" && (role === "stirrup" || role === "shear");
 }
 
 function resolveBeamStirrupEndLength(
@@ -1069,10 +1103,14 @@ export function getMissingRebarRequiredInputLabels(
   candidate: RebarQuantityCandidateRecord
 ): string[] {
   const missing: string[] = [];
+  const effectiveRole = getEffectiveRebarRole(candidate);
+  const isBeamMain = candidate.memberType === "beam" && effectiveRole === "main";
+  const isBeamStirrupOrShear =
+    candidate.memberType === "beam" && (effectiveRole === "stirrup" || effectiveRole === "shear");
   const hasSpacingOrDirectCount =
     hasPositiveInput(candidate.spacingMm) || hasPositiveInput(candidate.manualBarCount ?? candidate.barCount);
 
-  if (!hasPositiveInput(candidate.coverMm)) missing.push("피복");
+  if (!isBeamMain && !hasPositiveInput(candidate.coverMm)) missing.push("피복");
   if (!hasPositiveInput(candidate.memberCount)) missing.push("반복 개수");
   if (candidate.memberType === "footing") {
     if (candidate.position !== "x" && candidate.position !== "y") missing.push("방향 X/Y");
@@ -1082,16 +1120,16 @@ export function getMissingRebarRequiredInputLabels(
   }
 
   if (candidate.memberType === "beam") {
-    if (candidate.position !== "main" && candidate.position !== "stirrup") {
+    if (effectiveRole !== "main" && effectiveRole !== "stirrup" && effectiveRole !== "shear") {
       missing.push("철근 종류 주근/늑근");
     }
     if (!hasPositiveInput(candidate.memberLengthMm)) missing.push("보 길이");
-    if (!hasPositiveInput(candidate.sectionWidthMm)) missing.push("보 폭");
-    if (!hasPositiveInput(candidate.sectionDepthMm)) missing.push("보 춤");
     if (
-      isBeamStirrupCandidate(candidate) &&
+      isBeamStirrupOrShear &&
       candidate.beamStirrupCalculationMode === "segmented_spacing"
     ) {
+      if (!hasPositiveInput(candidate.sectionWidthMm)) missing.push("보 폭");
+      if (!hasPositiveInput(candidate.sectionDepthMm)) missing.push("보 춤");
       const endZoneMode = candidate.beamStirrupEndZoneMode ?? "ratio";
       const centerSpacing = candidate.beamStirrupCenterSpacingMm ?? candidate.spacingMm;
       const autoEndSpacing =
@@ -1128,12 +1166,14 @@ export function getMissingRebarRequiredInputLabels(
       ) {
         missing.push("구간 길이 검토 필요");
       }
-    } else if (candidate.position === "main") {
+    } else if (isBeamMain) {
       if (!hasPositiveInput(candidate.manualBarCount)) {
-        missing.push("철근 개수 또는 늑근 간격");
+        missing.push("직접 본수");
       }
-    } else if (candidate.position === "stirrup") {
-      if (!hasSpacingOrDirectCount) missing.push("철근 개수 또는 늑근 간격");
+    } else if (isBeamStirrupOrShear) {
+      if (!hasPositiveInput(candidate.sectionWidthMm)) missing.push("보 폭");
+      if (!hasPositiveInput(candidate.sectionDepthMm)) missing.push("보 춤");
+      if (!hasPositiveInput(candidate.spacingMm)) missing.push("철근 개수 또는 늑근 간격");
     } else if (!hasSpacingOrDirectCount) {
       missing.push("철근 개수 또는 늑근 간격");
     }
@@ -1206,6 +1246,7 @@ export function recalculateRebarQuantityCandidate(
   const faceCount = positiveOrDefault(candidate.faceCount, defaultFaceCount);
   const barCountRule = candidate.barCountRule ?? "floor_plus_one";
   const manualBarCount = positiveOrDefault(candidate.manualBarCount, 0);
+  const effectiveRole = getEffectiveRebarRole(candidate);
   const base: RebarQuantityCandidateRecord = {
     ...candidate,
     unitWeightKgPerM: unitWeight,
@@ -1330,8 +1371,9 @@ export function recalculateRebarQuantityCandidate(
     }
 
     const isStirrup =
-      candidate.position === "stirrup" ||
-      (candidate.position === "unknown" && Boolean(candidate.spacingMm && !candidate.barCount));
+      effectiveRole === "stirrup" ||
+      effectiveRole === "shear" ||
+      (effectiveRole === "unknown" && Boolean(candidate.spacingMm && !candidate.barCount));
 
     if (isStirrup) {
       if (!candidate.sectionWidthMm || !candidate.sectionDepthMm) {
@@ -1444,6 +1486,7 @@ export function recalculateRebarQuantityCandidate(
           materialQuantityKg: invalid ? 0 : roundQuantity(materialWeightKg, 2),
           materialQuantityTon: invalid ? 0 : roundQuantity(materialWeightKg / 1000, 4),
           calculationFormula:
+            "현재 산출 모드: 보 늑근/전단근 - 단부·중앙부 분리. " +
             "보 늑근 구간별 산출 - " +
             `좌측 단부: 길이 ${roundQuantity(leftEndLength, 1)}mm / 간격 ${leftSpacing ?? "-"}mm / 본수 ${leftCount}본, ` +
             `중앙부: 길이 ${roundQuantity(centerLength, 1)}mm / 간격 ${centerSpacing ?? "-"}mm / 본수 ${centerCount}본, ` +
@@ -1477,7 +1520,9 @@ export function recalculateRebarQuantityCandidate(
       }
 
       const barCount = candidate.spacingMm
-        ? resolveCountByRule(
+        ? manualBarCount > 0
+          ? manualBarCount
+          : resolveCountByRule(
             candidate.memberLengthMm / candidate.spacingMm,
             barCountRule,
             manualBarCount
@@ -1492,7 +1537,9 @@ export function recalculateRebarQuantityCandidate(
           deduction
       ) / 1000;
       const countPreview = candidate.spacingMm
-        ? getCountRulePreview(
+        ? manualBarCount > 0
+          ? `직접입력 ${manualBarCount}`
+          : getCountRulePreview(
             `${candidate.memberLengthMm} / ${candidate.spacingMm}`,
             barCountRule,
             manualBarCount
@@ -1504,6 +1551,7 @@ export function recalculateRebarQuantityCandidate(
         barCount,
         singleBarLengthM,
         formula:
+          "현재 산출 모드: 보 늑근/전단근 - 단일 간격. " +
           `보 늑근: ${countPreview}본 x ` +
           `[2x(${candidate.sectionWidthMm}-2x${cover})+2x(${candidate.sectionDepthMm}-2x${cover})+갈고리 ${hook}+절곡 ${bend}]/1000m ` +
           `x ${candidate.diameter} ${unitWeight}kg/m x ${memberCount}EA x ${faceCount}면`,
@@ -1512,17 +1560,20 @@ export function recalculateRebarQuantityCandidate(
       });
     }
 
-    const barCount = positiveOrDefault(candidate.barCount ?? manualBarCount, 0);
-    const singleBarLengthM = Math.max(0, candidate.memberLengthMm + anchorage + splice - deduction) / 1000;
+    const barCount = manualBarCount;
+    const singleBarLengthM =
+      Math.max(0, candidate.memberLengthMm + anchorage + splice + hook + bend - deduction) / 1000;
 
     return buildQuantityResult({
-      base: { ...base, position: candidate.position === "unknown" ? "main" : candidate.position },
+      base: { ...base, position: "main", rebarRole: "main" },
       barCount,
       singleBarLengthM,
       formula:
+        "현재 산출 모드: 보 주근. " +
         `보 주근: ${barCount}본 x ${roundQuantity(singleBarLengthM, 3)}m x ` +
-        `${memberCount}회 x ${faceCount}면 x ${unitWeight}kg/m`,
-      basis: "보 주근: 본수 x (보 길이 + 정착길이 + 이음길이) x 단위중량 x 반복 개수입니다."
+        `${unitWeight}kg/m x ${memberCount}회 x ${faceCount}면`,
+      basis:
+        "보 주근: 1본 길이 = 보 길이 + 정착 + 이음 + 갈고리 + 절곡보정 - 공제이며, 정미중량은 1본 길이 x 직접 본수 x 단위중량 x 반복개수 x 면수입니다."
     });
   }
 

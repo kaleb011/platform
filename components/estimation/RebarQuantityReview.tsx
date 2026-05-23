@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {
+  getEffectiveRebarRole,
   getMissingRebarRequiredInputLabels,
   getRebarCandidateSourceGroup,
   isWallRebarDetailReviewRequired,
@@ -174,6 +175,15 @@ function PracticalFormulaSummary({ candidate }: { candidate: RebarQuantityCandid
   const advancedApplied = hasAdvancedAdjustments(candidate);
   const faceCount = candidate.faceCount ?? 1;
   const lossRate = candidate.lossRate ?? 0;
+  const effectiveRole = getEffectiveRebarRole(candidate);
+  const modeLabel =
+    candidate.memberType === "beam" && effectiveRole === "main"
+      ? "보 주근"
+      : candidate.memberType === "beam" && (effectiveRole === "stirrup" || effectiveRole === "shear")
+        ? candidate.beamStirrupCalculationMode === "segmented_spacing"
+          ? "보 늑근/전단근 - 단부·중앙부 분리"
+          : "보 늑근/전단근 - 단일 간격"
+        : `${memberTypeLabel[candidate.memberType]} ${positionLabel[candidate.position]}`;
 
   return (
     <section className="rounded-[14px] border border-[#d7e2d6] bg-[#f8fbf9] px-4 py-4">
@@ -189,6 +199,7 @@ function PracticalFormulaSummary({ candidate }: { candidate: RebarQuantityCandid
           {advancedApplied ? "고급 보정 적용" : "고급 보정 미적용"}
         </Badge>
       </div>
+      <Badge tone="blue">현재 산출 모드: {modeLabel}</Badge>
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] md:grid-cols-3 xl:grid-cols-6">
         <div className="rounded-[10px] bg-white px-3 py-2">
@@ -765,7 +776,10 @@ function TemplateInputs({
   const missing = (label: string) => missingRequiredLabels.includes(label);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const advancedApplied = hasAdvancedAdjustments(candidate);
-  const isBeamStirrup = activeType === "beam" && candidate.position === "stirrup";
+  const effectiveRole = getEffectiveRebarRole(candidate);
+  const isBeamMain = activeType === "beam" && effectiveRole === "main";
+  const isBeamStirrup =
+    activeType === "beam" && (effectiveRole === "stirrup" || effectiveRole === "shear");
   const beamStirrupMode = candidate.beamStirrupCalculationMode ?? "single_spacing";
   const beamStirrupEndZoneMode = candidate.beamStirrupEndZoneMode ?? "ratio";
   const beamStirrupRatio = candidate.beamStirrupEndZoneRatio ?? 0.25;
@@ -798,15 +812,19 @@ function TemplateInputs({
     typeof derivedRightEndLength === "number"
       ? Math.max(0, candidate.memberLengthMm - derivedLeftEndLength - derivedRightEndLength)
       : undefined;
+  const positionValue =
+    activeType === "beam" && effectiveRole === "main"
+      ? "main"
+      : activeType === "beam" && (effectiveRole === "stirrup" || effectiveRole === "shear")
+        ? "stirrup"
+        : positionOptions.some((option) => option.value === candidate.position)
+          ? candidate.position
+          : positionOptions[0].value;
   const handlePositionChange = (value: RebarPosition) => {
     const updates: Partial<RebarQuantityCandidateRecord> = { position: value };
 
-    if ((activeType === "beam" || activeType === "column") && value !== candidate.position) {
-      updates.barCount = undefined;
-      updates.manualBarCount = undefined;
-      if (value !== "main" && candidate.barCountRule === "direct") {
-        updates.barCountRule = "floor_plus_one";
-      }
+    if (activeType === "beam") {
+      updates.rebarRole = value === "main" ? "main" : value === "stirrup" ? "stirrup" : undefined;
     }
 
     onChange(updates);
@@ -859,11 +877,7 @@ function TemplateInputs({
             onChange={handlePositionChange}
             options={positionOptions}
             required
-            value={
-              positionOptions.some((option) => option.value === candidate.position)
-                ? candidate.position
-                : positionOptions[0].value
-            }
+            value={positionValue}
           />
           <SelectField
             field="diameter"
@@ -930,32 +944,36 @@ function TemplateInputs({
             required
             value={candidate.memberLengthMm}
           />
-          <NumberInput
-            field="sectionWidthMm"
-            label="보 폭 mm"
-            memberType={candidate.memberType}
-            missing={missing("보 폭")}
-            onChange={(value) => onChange({ sectionWidthMm: value })}
-            required
-            value={candidate.sectionWidthMm}
-          />
-          <NumberInput
-            field="sectionDepthMm"
-            label="보 춤 mm"
-            memberType={candidate.memberType}
-            missing={missing("보 춤")}
-            onChange={(value) => onChange({ sectionDepthMm: value })}
-            required
-            value={candidate.sectionDepthMm}
-          />
-          <NumberInput
-            field="spacingMm"
-            label="늑근 간격 mm"
-            memberType={candidate.memberType}
-            missing={missing("철근 개수 또는 늑근 간격")}
-            onChange={(value) => onChange({ spacingMm: value })}
-            value={candidate.spacingMm}
-          />
+          {isBeamStirrup ? (
+            <>
+              <NumberInput
+                field="sectionWidthMm"
+                label="보 폭 mm"
+                memberType={candidate.memberType}
+                missing={missing("보 폭")}
+                onChange={(value) => onChange({ sectionWidthMm: value })}
+                required
+                value={candidate.sectionWidthMm}
+              />
+              <NumberInput
+                field="sectionDepthMm"
+                label="보 춤 mm"
+                memberType={candidate.memberType}
+                missing={missing("보 춤")}
+                onChange={(value) => onChange({ sectionDepthMm: value })}
+                required
+                value={candidate.sectionDepthMm}
+              />
+              <NumberInput
+                field="spacingMm"
+                label="늑근 간격 mm"
+                memberType={candidate.memberType}
+                missing={missing("철근 개수 또는 늑근 간격")}
+                onChange={(value) => onChange({ spacingMm: value })}
+                value={candidate.spacingMm}
+              />
+            </>
+          ) : null}
         </div>
       ) : null}
 
@@ -1232,7 +1250,12 @@ function TemplateInputs({
           field="manualBarCount"
           label="직접 본수"
           memberType={candidate.memberType}
-          missing={missing("철근 간격 또는 직접 본수") || missing("철근 개수 또는 늑근 간격") || missing("철근 개수 또는 띠철근 간격")}
+          missing={
+            missing("직접 본수") ||
+            missing("철근 간격 또는 직접 본수") ||
+            (!isBeamStirrup && missing("철근 개수 또는 늑근 간격")) ||
+            missing("철근 개수 또는 띠철근 간격")
+          }
           onChange={(value) =>
             onChange({
               barCount: value,
@@ -1277,7 +1300,7 @@ function TemplateInputs({
           memberType={candidate.memberType}
           missing={missing("피복")}
           onChange={(value) => onChange({ coverMm: value })}
-          required
+          required={!isBeamMain}
           value={candidate.coverMm}
         />
       </div>

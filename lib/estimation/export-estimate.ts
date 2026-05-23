@@ -17,6 +17,7 @@ import {
   getSourceTypeLabel,
   resolveReviewCompleteness
 } from "@/lib/estimation/rebar-evidence";
+import { getEffectiveRebarRole } from "@/lib/estimation/rebar-quantity";
 
 function hasAdvancedRebarAdjustments(candidate: RebarQuantityCandidateRecord) {
   return [
@@ -29,6 +30,44 @@ function hasAdvancedRebarAdjustments(candidate: RebarQuantityCandidateRecord) {
 }
 
 function buildBeamStirrupSegmentExportNote(candidate: RebarQuantityCandidateRecord) {
+  const effectiveRole = getEffectiveRebarRole(candidate);
+
+  if (candidate.memberType === "beam" && effectiveRole === "main") {
+    return [
+      "산출 모드: 보 주근",
+      `보 길이 ${candidate.memberLengthMm ?? ""}mm`,
+      `직접 본수 ${candidate.manualBarCount ?? candidate.barCount ?? ""}본`,
+      `정착 ${candidate.anchorageLengthMm ?? 0}mm`,
+      `이음 ${candidate.spliceLengthMm ?? 0}mm`,
+      `갈고리 ${candidate.hookLengthMm ?? 0}mm`,
+      `절곡 ${candidate.bendCorrectionMm ?? 0}mm`,
+      `공제 ${candidate.deductionLengthMm ?? 0}mm`,
+      `단위중량 ${candidate.unitWeightKgPerM}kg/m`,
+      `정미중량 ${candidate.quantityKg}kg`,
+      `자재중량 ${candidate.materialQuantityKg ?? ""}kg`
+    ]
+      .filter(Boolean)
+      .join(" / ");
+  }
+
+  if (
+    candidate.memberType === "beam" &&
+    (effectiveRole === "stirrup" || effectiveRole === "shear") &&
+    candidate.beamStirrupCalculationMode !== "segmented_spacing"
+  ) {
+    return [
+      "산출 모드: 보 늑근/전단근",
+      `보 폭/춤/피복 ${candidate.sectionWidthMm ?? ""}/${candidate.sectionDepthMm ?? ""}/${candidate.coverMm ?? ""}mm`,
+      `늑근 1개 길이 ${candidate.singleBarLengthM ?? ""}m`,
+      candidate.spacingMm ? `간격 @${candidate.spacingMm}` : null,
+      candidate.manualBarCount ? `override ${candidate.manualBarCount}본` : null,
+      `정미중량 ${candidate.quantityKg}kg`,
+      `자재중량 ${candidate.materialQuantityKg ?? ""}kg`
+    ]
+      .filter(Boolean)
+      .join(" / ");
+  }
+
   if (candidate.beamStirrupCalculationMode !== "segmented_spacing") {
     return candidate.beamStirrupCalculationMode === "single_spacing" ? "단일 간격" : "";
   }

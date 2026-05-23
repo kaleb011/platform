@@ -78,6 +78,8 @@ export type RebarBarCountRule = "floor_plus_one" | "ceil_plus_one" | "direct";
 
 export type RebarFootingLayer = "top" | "bottom";
 
+export type RebarRole = "main" | "stirrup" | "shear" | "unknown";
+
 export type BeamStirrupCalculationMode = "single_spacing" | "segmented_spacing";
 
 export type BeamStirrupEndZoneMode = "ratio" | "manual" | "two_depth";
@@ -416,8 +418,10 @@ export interface RebarQuantityCandidateRecord {
   sourceFileName?: string;
   drawingNo?: string;
   memberName?: string;
-  memberType: RebarMemberType;
-  position: RebarPosition;
+    memberType: RebarMemberType;
+    position: RebarPosition;
+    rebarRole?: string;
+    originalRole?: string;
   workCategory: string;
   itemName: string;
   specification: string;
