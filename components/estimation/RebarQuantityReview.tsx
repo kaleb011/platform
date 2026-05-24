@@ -176,7 +176,10 @@ function hasAdvancedAdjustments(candidate: RebarQuantityCandidateRecord) {
     candidate.spliceLengthMm,
     candidate.hookLengthMm,
     candidate.deductionLengthMm,
-    candidate.bendCorrectionMm
+    candidate.bendCorrectionMm,
+    candidate.beamMainAnchorageOccurrenceCount,
+    candidate.beamMainSpliceOccurrenceCount,
+    candidate.beamMainExtraReinforcementLengthMm
   ].some((value) => typeof value === "number" && value > 0);
 }
 
@@ -795,6 +798,7 @@ function TemplateInputs({
   const beamStirrupEndZoneMode = candidate.beamStirrupEndZoneMode ?? "ratio";
   const beamStirrupRatio = candidate.beamStirrupEndZoneRatio ?? 0.25;
   const beamMainMode = candidate.beamMainCalculationMode ?? "single_length";
+  const usesBeamMainSegmentCounts = isBeamMain && beamMainMode === "segmented_layout";
   const beamMainEndZoneMode = candidate.beamMainEndZoneMode ?? "ratio";
   const beamMainRatio = candidate.beamMainEndZoneRatio ?? 0.25;
   const beamStirrupAutoEndSpacing = candidate.beamStirrupUseAutoEndSpacing !== false;
@@ -1061,6 +1065,48 @@ function TemplateInputs({
                   memberType={candidate.memberType}
                   onChange={(value) => onChange({ sectionDepthMm: value })}
                   value={candidate.sectionDepthMm}
+                />
+                <NumberInput
+                  field="anchorageLengthMm"
+                  label="주근 정착길이 mm"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ anchorageLengthMm: value })}
+                  value={candidate.anchorageLengthMm}
+                />
+                <NumberInput
+                  field="spliceLengthMm"
+                  label="주근 이음길이 mm"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ spliceLengthMm: value })}
+                  value={candidate.spliceLengthMm}
+                />
+                <NumberInput
+                  field="beamMainDetailMemberCount"
+                  label="상세보정 부재 개수"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainDetailMemberCount: value ?? 1 })}
+                  value={candidate.beamMainDetailMemberCount ?? candidate.memberCount ?? 1}
+                />
+                <NumberInput
+                  field="beamMainAnchorageOccurrenceCount"
+                  label="부재당 정착 개소"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainAnchorageOccurrenceCount: value })}
+                  value={candidate.beamMainAnchorageOccurrenceCount}
+                />
+                <NumberInput
+                  field="beamMainSpliceOccurrenceCount"
+                  label="부재당 이음 개소"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainSpliceOccurrenceCount: value })}
+                  value={candidate.beamMainSpliceOccurrenceCount}
+                />
+                <NumberInput
+                  field="beamMainExtraReinforcementLengthMm"
+                  label="부재당 추가 보강 길이 mm"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainExtraReinforcementLengthMm: value })}
+                  value={candidate.beamMainExtraReinforcementLengthMm}
                 />
                 <NumberInput
                   field="beamMainLeftEndLengthMm"
@@ -1400,25 +1446,27 @@ function TemplateInputs({
       ) : null}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {!usesBeamMainSegmentCounts ? (
           <NumberInput
-          field="manualBarCount"
-          label="직접 본수"
-          memberType={candidate.memberType}
-          missing={
-            missing("직접 본수") ||
-            missing("철근 간격 또는 직접 본수") ||
-            (!isBeamStirrup && missing("철근 개수 또는 늑근 간격")) ||
-            missing("철근 개수 또는 띠철근 간격")
-          }
-          onChange={(value) =>
-            onChange({
-              barCount: value,
-              manualBarCount: value,
-              barCountRule: value ? "direct" : candidate.barCountRule
-            })
-          }
-          value={candidate.manualBarCount}
-        />
+            field="manualBarCount"
+            label="직접 본수"
+            memberType={candidate.memberType}
+            missing={
+              missing("직접 본수") ||
+              missing("철근 간격 또는 직접 본수") ||
+              (!isBeamStirrup && missing("철근 개수 또는 늑근 간격")) ||
+              missing("철근 개수 또는 띠철근 간격")
+            }
+            onChange={(value) =>
+              onChange({
+                barCount: value,
+                manualBarCount: value,
+                barCountRule: value ? "direct" : candidate.barCountRule
+              })
+            }
+            value={candidate.manualBarCount}
+          />
+        ) : null}
         {!isBeamMain ? (
           <SelectField
           field="barCountRule"

@@ -486,6 +486,11 @@ export interface RebarQuantityCandidateRecord {
     beamMainBottomCenterCount?: number;
     beamMainBottomRightCount?: number;
     beamMainTotalCount?: number;
+    beamMainDetailMemberCount?: number;
+    beamMainAnchorageOccurrenceCount?: number;
+    beamMainSpliceOccurrenceCount?: number;
+    beamMainExtraReinforcementLengthMm?: number;
+    beamMainDetailAdjustmentLengthM?: number;
     beamMainSegmentNote?: string;
     footingLayer?: RebarFootingLayer;
   memberCount: number;

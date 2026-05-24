@@ -40,6 +40,11 @@ function buildBeamStirrupSegmentExportNote(candidate: RebarQuantityCandidateReco
         `중앙 ${candidate.beamMainCenterLengthMm ?? ""}mm 상부 ${candidate.beamMainTopCenterCount ?? 0}본 하부 ${candidate.beamMainBottomCenterCount ?? 0}본`,
         `우측 ${candidate.beamMainRightEndLengthMm ?? ""}mm 상부 ${candidate.beamMainTopRightCount ?? 0}본 하부 ${candidate.beamMainBottomRightCount ?? 0}본`,
         `총 ${candidate.beamMainTotalCount ?? candidate.barCount ?? ""}본`,
+        `상세보정 부재 ${candidate.beamMainDetailMemberCount ?? 1}개`,
+        `정착 ${candidate.beamMainAnchorageOccurrenceCount ?? 0}개소 x ${candidate.anchorageLengthMm ?? 0}mm`,
+        `이음 ${candidate.beamMainSpliceOccurrenceCount ?? 0}개소 x ${candidate.spliceLengthMm ?? 0}mm`,
+        `추가보강 ${candidate.beamMainExtraReinforcementLengthMm ?? 0}mm`,
+        `보정길이 ${candidate.beamMainDetailAdjustmentLengthM ?? 0}m`,
         `정미중량 ${candidate.quantityKg}kg`,
         `자재중량 ${candidate.materialQuantityKg ?? ""}kg`,
         candidate.beamMainSegmentNote ?? ""

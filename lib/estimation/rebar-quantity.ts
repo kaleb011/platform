@@ -1612,6 +1612,16 @@ export function recalculateRebarQuantityCandidate(
       const bottomLeftCount = positiveOrDefault(candidate.beamMainBottomLeftCount, 0);
       const bottomCenterCount = positiveOrDefault(candidate.beamMainBottomCenterCount, 0);
       const bottomRightCount = positiveOrDefault(candidate.beamMainBottomRightCount, 0);
+      const detailMemberCount = positiveOrDefault(candidate.beamMainDetailMemberCount, 1);
+      const anchorageOccurrenceCount = positiveOrDefault(
+        candidate.beamMainAnchorageOccurrenceCount,
+        0
+      );
+      const spliceOccurrenceCount = positiveOrDefault(candidate.beamMainSpliceOccurrenceCount, 0);
+      const extraReinforcementLengthMm = nonNegativeOrDefault(
+        candidate.beamMainExtraReinforcementLengthMm,
+        0
+      );
       const totalCount =
         topLeftCount +
         topCenterCount +
@@ -1619,16 +1629,28 @@ export function recalculateRebarQuantityCandidate(
         bottomLeftCount +
         bottomCenterCount +
         bottomRightCount;
-      const segmentAdjustmentMm = anchorage + splice + hook + bend - deduction;
-      const leftSingleLengthM = Math.max(0, leftEndLength + segmentAdjustmentMm) / 1000;
-      const centerSingleLengthM = Math.max(0, centerLength + segmentAdjustmentMm) / 1000;
-      const rightSingleLengthM = Math.max(0, rightEndLength + segmentAdjustmentMm) / 1000;
-      const totalBarLengthM =
+      const leftSingleLengthM = Math.max(0, leftEndLength) / 1000;
+      const centerSingleLengthM = Math.max(0, centerLength) / 1000;
+      const rightSingleLengthM = Math.max(0, rightEndLength) / 1000;
+      const baseBarLengthM =
         leftSingleLengthM * (topLeftCount + bottomLeftCount) +
         centerSingleLengthM * (topCenterCount + bottomCenterCount) +
         rightSingleLengthM * (topRightCount + bottomRightCount);
+      const detailAdjustmentLengthM =
+        Math.max(
+          0,
+          detailMemberCount *
+            (anchorageOccurrenceCount * anchorage +
+              spliceOccurrenceCount * splice +
+              extraReinforcementLengthMm +
+              hook +
+              bend -
+              deduction)
+        ) / 1000;
+      const totalBarLengthM = baseBarLengthM + detailAdjustmentLengthM;
       const averageBarLengthM = totalCount > 0 ? totalBarLengthM / totalCount : 0;
-      const netWeightKg = totalBarLengthM * unitWeight * memberCount * faceCount;
+      const quantityLengthM = baseBarLengthM * memberCount + detailAdjustmentLengthM;
+      const netWeightKg = quantityLengthM * unitWeight * faceCount;
       const materialWeightKg = netWeightKg * (1 + lossRate);
       const invalid =
         segmentLengthExceeded ||
@@ -1638,6 +1660,9 @@ export function recalculateRebarQuantityCandidate(
       const segmentNote = [
         segmentLengthExceeded ? "구간 길이 검토 필요" : null,
         "상부/하부 주근을 좌측 단부, 중앙부, 우측 단부로 분리 산출합니다.",
+        detailAdjustmentLengthM > 0
+          ? `정착/이음/추가 보강 보정 ${roundQuantity(detailAdjustmentLengthM, 3)}m를 더했습니다.`
+          : null,
         "단부와 중앙부의 상하부 배근이 다른 보 일람표는 각 구간 본수를 별도 입력해 보정해야 합니다."
       ]
         .filter(Boolean)
@@ -1660,6 +1685,11 @@ export function recalculateRebarQuantityCandidate(
         beamMainBottomCenterCount: bottomCenterCount || undefined,
         beamMainBottomRightCount: bottomRightCount || undefined,
         beamMainTotalCount: totalCount,
+        beamMainDetailMemberCount: detailMemberCount,
+        beamMainAnchorageOccurrenceCount: anchorageOccurrenceCount || undefined,
+        beamMainSpliceOccurrenceCount: spliceOccurrenceCount || undefined,
+        beamMainExtraReinforcementLengthMm: extraReinforcementLengthMm || undefined,
+        beamMainDetailAdjustmentLengthM: roundQuantity(detailAdjustmentLengthM, 3),
         beamMainSegmentNote: segmentNote,
         barCount: totalCount,
         singleBarLengthM: roundQuantity(averageBarLengthM, 3),
@@ -1672,11 +1702,13 @@ export function recalculateRebarQuantityCandidate(
           `좌측 단부 ${roundQuantity(leftEndLength, 1)}mm: 상부 ${topLeftCount}본 / 하부 ${bottomLeftCount}본, ` +
           `중앙부 ${roundQuantity(centerLength, 1)}mm: 상부 ${topCenterCount}본 / 하부 ${bottomCenterCount}본, ` +
           `우측 단부 ${roundQuantity(rightEndLength, 1)}mm: 상부 ${topRightCount}본 / 하부 ${bottomRightCount}본, ` +
-          `총 길이 ${roundQuantity(totalBarLengthM, 3)}m x ${unitWeight}kg/m x ${memberCount}EA x ${faceCount}면 = ${roundQuantity(netWeightKg, 2)}kg, ` +
+          `기본 중심선 길이 ${roundQuantity(baseBarLengthM, 3)}m x 반복 ${memberCount}EA + 정착/이음/보강 보정 ${roundQuantity(detailAdjustmentLengthM, 3)}m = 수량길이 ${roundQuantity(quantityLengthM, 3)}m, ` +
+          `${roundQuantity(quantityLengthM, 3)}m x ${unitWeight}kg/m x ${faceCount}면 = ${roundQuantity(netWeightKg, 2)}kg, ` +
           `자재중량 = 정미중량 x (1 + LOSS율 ${lossRate}) = ${roundQuantity(materialWeightKg, 2)}kg`,
         calculationBasis: [
-          "보 주근: 단부와 중앙부의 상부/하부 배근이 다를 때 구간별 본수 x 구간 길이로 정미중량을 산출합니다.",
-          "각 구간 1본 길이는 구간 길이 + 정착 + 이음 + 갈고리 + 절곡보정 - 공제입니다.",
+          "보 주근: 단부와 중앙부의 상부/하부 배근이 다를 때 구간별 본수 x 구간 길이를 기본 중심선 길이로 산출합니다.",
+          "정착/이음은 총연장에 1회 가산하지 않고, 상세보정 부재 개수 x 부재당 발생 개소 x 보정길이로 별도 가산합니다.",
+          `보정길이 = 상세보정 부재 ${detailMemberCount}개 x (정착 ${anchorageOccurrenceCount}개소 x ${anchorage}mm + 이음 ${spliceOccurrenceCount}개소 x ${splice}mm + 추가보강 ${extraReinforcementLengthMm}mm + 후크 ${hook}mm + 절곡 ${bend}mm - 공제 ${deduction}mm) = ${roundQuantity(detailAdjustmentLengthM, 3)}m입니다.`,
           "자재중량은 정미중량 x (1 + LOSS율)입니다.",
           segmentNote,
           getGeneralRuleBasis(base)

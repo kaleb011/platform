@@ -273,4 +273,34 @@ describe("recalculateRebarQuantityCandidate beam main segmented layout", () => {
     expect(result.quantityKg).toBeGreaterThan(0);
     expect(result.quantityReviewRequired).toBe(false);
   });
+
+  it("adds member-by-member anchorage and splice adjustments to beam main bars", () => {
+    const result = recalculateRebarQuantityCandidate(
+      createBeamMainCandidate({
+        memberLengthMm: 6000,
+        beamMainCalculationMode: "segmented_layout",
+        beamMainEndZoneMode: "ratio",
+        beamMainEndZoneRatio: 0.25,
+        beamMainTopLeftCount: 5,
+        beamMainTopCenterCount: 3,
+        beamMainTopRightCount: 5,
+        beamMainBottomLeftCount: 3,
+        beamMainBottomCenterCount: 3,
+        beamMainBottomRightCount: 3,
+        beamMainDetailMemberCount: 8,
+        anchorageLengthMm: 1000,
+        spliceLengthMm: 1200,
+        beamMainAnchorageOccurrenceCount: 2,
+        beamMainSpliceOccurrenceCount: 1,
+        beamMainExtraReinforcementLengthMm: 500,
+        manualBarCount: undefined,
+        barCount: undefined
+      })
+    );
+
+    expect(result.beamMainDetailAdjustmentLengthM).toBe(29.6);
+    expect(result.quantityKg).toBeCloseTo(217.66, 2);
+    expect(result.calculationBasis).toContain("정착/이음");
+    expect(result.quantityReviewRequired).toBe(false);
+  });
 });
