@@ -43,6 +43,7 @@ import {
 } from "@/lib/estimation/rebar-evidence";
 import type {
   DrawingSheetIndexRecord,
+  BeamMainCalculationMode,
   BeamStirrupCalculationMode,
   BeamStirrupEndZoneMode,
   RebarBarCountRule,
@@ -121,6 +122,14 @@ const beamStirrupCalculationModeOptions: Array<{
   { value: "segmented_spacing", label: "단부·중앙부 분리" }
 ];
 
+const beamMainCalculationModeOptions: Array<{
+  value: BeamMainCalculationMode;
+  label: string;
+}> = [
+  { value: "single_length", label: "단일 길이" },
+  { value: "segmented_layout", label: "상·하부 구간 분리" }
+];
+
 const beamStirrupEndZoneModeOptions: Array<{ value: BeamStirrupEndZoneMode; label: string }> = [
   { value: "ratio", label: "비율" },
   { value: "manual", label: "직접 입력" },
@@ -178,7 +187,9 @@ function PracticalFormulaSummary({ candidate }: { candidate: RebarQuantityCandid
   const effectiveRole = getEffectiveRebarRole(candidate);
   const modeLabel =
     candidate.memberType === "beam" && effectiveRole === "main"
-      ? "보 주근"
+      ? candidate.beamMainCalculationMode === "segmented_layout"
+        ? "보 주근 - 단부·중앙부 상하부 분리"
+        : "보 주근"
       : candidate.memberType === "beam" && (effectiveRole === "stirrup" || effectiveRole === "shear")
         ? candidate.beamStirrupCalculationMode === "segmented_spacing"
           ? "보 늑근/전단근 - 단부·중앙부 분리"
@@ -783,10 +794,13 @@ function TemplateInputs({
   const beamStirrupMode = candidate.beamStirrupCalculationMode ?? "segmented_spacing";
   const beamStirrupEndZoneMode = candidate.beamStirrupEndZoneMode ?? "ratio";
   const beamStirrupRatio = candidate.beamStirrupEndZoneRatio ?? 0.25;
+  const beamMainMode = candidate.beamMainCalculationMode ?? "single_length";
+  const beamMainEndZoneMode = candidate.beamMainEndZoneMode ?? "ratio";
+  const beamMainRatio = candidate.beamMainEndZoneRatio ?? 0.25;
   const beamStirrupAutoEndSpacing = candidate.beamStirrupUseAutoEndSpacing !== false;
   const beamStirrupCenterSpacing = candidate.beamStirrupCenterSpacingMm ?? candidate.spacingMm;
   const suggestedEndSpacing = beamStirrupCenterSpacing
-    ? Math.max(1, Math.floor(beamStirrupCenterSpacing / 2))
+    ? Math.max(1, Math.floor(beamStirrupCenterSpacing * 0.4))
     : undefined;
   const derivedLeftEndLength =
     beamStirrupEndZoneMode === "ratio"
@@ -812,6 +826,30 @@ function TemplateInputs({
     typeof derivedRightEndLength === "number"
       ? Math.max(0, candidate.memberLengthMm - derivedLeftEndLength - derivedRightEndLength)
       : undefined;
+  const derivedMainLeftEndLength =
+    beamMainEndZoneMode === "ratio"
+      ? candidate.memberLengthMm
+        ? candidate.memberLengthMm * beamMainRatio
+        : undefined
+      : beamMainEndZoneMode === "two_depth"
+        ? candidate.beamMainLeftEndLengthMm ??
+          (candidate.sectionDepthMm ? candidate.sectionDepthMm * 2 : undefined)
+        : candidate.beamMainLeftEndLengthMm;
+  const derivedMainRightEndLength =
+    beamMainEndZoneMode === "ratio"
+      ? candidate.memberLengthMm
+        ? candidate.memberLengthMm * beamMainRatio
+        : undefined
+      : beamMainEndZoneMode === "two_depth"
+        ? candidate.beamMainRightEndLengthMm ??
+          (candidate.sectionDepthMm ? candidate.sectionDepthMm * 2 : undefined)
+        : candidate.beamMainRightEndLengthMm;
+  const derivedMainCenterLength =
+    typeof candidate.memberLengthMm === "number" &&
+    typeof derivedMainLeftEndLength === "number" &&
+    typeof derivedMainRightEndLength === "number"
+      ? Math.max(0, candidate.memberLengthMm - derivedMainLeftEndLength - derivedMainRightEndLength)
+      : undefined;
   const positionValue =
     activeType === "beam" && effectiveRole === "main"
       ? "main"
@@ -835,8 +873,8 @@ function TemplateInputs({
       beamStirrupCenterSpacingMm: value,
       ...(beamStirrupAutoEndSpacing && value
         ? {
-            beamStirrupLeftSpacingMm: Math.max(1, Math.floor(value / 2)),
-            beamStirrupRightSpacingMm: Math.max(1, Math.floor(value / 2))
+            beamStirrupLeftSpacingMm: Math.max(1, Math.floor(value * 0.4)),
+            beamStirrupRightSpacingMm: Math.max(1, Math.floor(value * 0.4))
           }
         : {})
     });
@@ -979,6 +1017,120 @@ function TemplateInputs({
         </div>
       ) : null}
 
+      {isBeamMain ? (
+        <section className="grid gap-3 rounded-[14px] border border-[#b7d9ff] bg-[#f4f9ff] px-4 py-4">
+          <div>
+            <p className="text-[13px] font-bold text-foreground">보 주근 구간별 산출</p>
+            <p className="mt-1 text-[11px] leading-5 text-slate">
+              보 일람표에서 단부와 중앙부의 상부/하부 주근 본수가 다를 때 좌측 단부, 중앙부, 우측 단부 길이와 각 구간 본수를 분리해 산출합니다.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <SelectField
+              field="beamMainCalculationMode"
+              label="산출 모드"
+              memberType={candidate.memberType}
+              onChange={(value: BeamMainCalculationMode) =>
+                onChange({ beamMainCalculationMode: value })
+              }
+              options={beamMainCalculationModeOptions}
+              value={beamMainMode}
+            />
+            {beamMainMode === "segmented_layout" ? (
+              <>
+                <SelectField
+                  field="beamMainEndZoneMode"
+                  label="단부 구간 산정 방식"
+                  memberType={candidate.memberType}
+                  onChange={(value: BeamStirrupEndZoneMode) =>
+                    onChange({ beamMainEndZoneMode: value })
+                  }
+                  options={beamStirrupEndZoneModeOptions}
+                  value={beamMainEndZoneMode}
+                />
+                <NumberInput
+                  field="beamMainEndZoneRatio"
+                  label="단부 구간 비율"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainEndZoneRatio: value ?? 0.25 })}
+                  value={beamMainRatio}
+                />
+                <NumberInput
+                  field="sectionDepthMm"
+                  label="보 춤 mm"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ sectionDepthMm: value })}
+                  value={candidate.sectionDepthMm}
+                />
+                <NumberInput
+                  field="beamMainLeftEndLengthMm"
+                  label="좌측 단부 길이 mm"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainLeftEndLengthMm: value })}
+                  value={derivedMainLeftEndLength}
+                />
+                <Field label="중앙부 길이 mm" source="자동 계산값">
+                  <input
+                    className="mt-1 h-10 w-full rounded-[10px] border border-border bg-[#f8fafc] px-3 text-right text-[13px] font-semibold text-foreground"
+                    disabled
+                    value={derivedMainCenterLength ?? ""}
+                  />
+                </Field>
+                <NumberInput
+                  field="beamMainRightEndLengthMm"
+                  label="우측 단부 길이 mm"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainRightEndLengthMm: value })}
+                  value={derivedMainRightEndLength}
+                />
+                <NumberInput
+                  field="beamMainTopLeftCount"
+                  label="좌측 상부 본수"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainTopLeftCount: value })}
+                  value={candidate.beamMainTopLeftCount}
+                />
+                <NumberInput
+                  field="beamMainTopCenterCount"
+                  label="중앙 상부 본수"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainTopCenterCount: value })}
+                  value={candidate.beamMainTopCenterCount}
+                />
+                <NumberInput
+                  field="beamMainTopRightCount"
+                  label="우측 상부 본수"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainTopRightCount: value })}
+                  value={candidate.beamMainTopRightCount}
+                />
+                <NumberInput
+                  field="beamMainBottomLeftCount"
+                  label="좌측 하부 본수"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainBottomLeftCount: value })}
+                  value={candidate.beamMainBottomLeftCount}
+                />
+                <NumberInput
+                  field="beamMainBottomCenterCount"
+                  label="중앙 하부 본수"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainBottomCenterCount: value })}
+                  value={candidate.beamMainBottomCenterCount}
+                />
+                <NumberInput
+                  field="beamMainBottomRightCount"
+                  label="우측 하부 본수"
+                  memberType={candidate.memberType}
+                  onChange={(value) => onChange({ beamMainBottomRightCount: value })}
+                  value={candidate.beamMainBottomRightCount}
+                />
+              </>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       {isBeamStirrup ? (
         <section className="grid gap-3 rounded-[14px] border border-[#b7d9ff] bg-[#f4f9ff] px-4 py-4">
           <div>
@@ -1034,7 +1186,7 @@ function TemplateInputs({
                       }
                       type="checkbox"
                     />
-                    중앙부 S 입력 시 단부 S/2 제안
+                    중앙부 S 입력 시 단부 0.4S 제안
                   </label>
                 </Field>
                 <NumberInput

@@ -33,6 +33,21 @@ function buildBeamStirrupSegmentExportNote(candidate: RebarQuantityCandidateReco
   const effectiveRole = getEffectiveRebarRole(candidate);
 
   if (candidate.memberType === "beam" && effectiveRole === "main") {
+    if (candidate.beamMainCalculationMode === "segmented_layout") {
+      return [
+        "산출 모드: 보 주근 단부/중앙부 분리",
+        `좌측 ${candidate.beamMainLeftEndLengthMm ?? ""}mm 상부 ${candidate.beamMainTopLeftCount ?? 0}본 하부 ${candidate.beamMainBottomLeftCount ?? 0}본`,
+        `중앙 ${candidate.beamMainCenterLengthMm ?? ""}mm 상부 ${candidate.beamMainTopCenterCount ?? 0}본 하부 ${candidate.beamMainBottomCenterCount ?? 0}본`,
+        `우측 ${candidate.beamMainRightEndLengthMm ?? ""}mm 상부 ${candidate.beamMainTopRightCount ?? 0}본 하부 ${candidate.beamMainBottomRightCount ?? 0}본`,
+        `총 ${candidate.beamMainTotalCount ?? candidate.barCount ?? ""}본`,
+        `정미중량 ${candidate.quantityKg}kg`,
+        `자재중량 ${candidate.materialQuantityKg ?? ""}kg`,
+        candidate.beamMainSegmentNote ?? ""
+      ]
+        .filter(Boolean)
+        .join(" / ");
+    }
+
     return [
       "산출 모드: 보 주근",
       `보 길이 ${candidate.memberLengthMm ?? ""}mm`,

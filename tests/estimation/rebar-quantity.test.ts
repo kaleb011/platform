@@ -104,6 +104,24 @@ describe("recalculateRebarQuantityCandidate beam role switching", () => {
     expect(getMissingRebarRequiredInputLabels(result)).not.toContain("직접 본수");
   });
 
+  it("uses direct bar count as segmented stirrup total count", () => {
+    const result = recalculateRebarQuantityCandidate(
+      createBeamStirrupCandidate({
+        beamStirrupCalculationMode: "segmented_spacing",
+        manualBarCount: 5,
+        barCount: 5,
+        beamStirrupLeftSpacingMm: undefined,
+        beamStirrupCenterSpacingMm: undefined,
+        beamStirrupRightSpacingMm: undefined
+      })
+    );
+
+    expect(result.barCount).toBe(5);
+    expect(result.beamStirrupTotalCount).toBe(5);
+    expect(result.quantityKg).toBeGreaterThan(0);
+    expect(result.quantityReviewRequired).toBe(false);
+  });
+
   it("uses user-selected main role before parsed stirrup-looking text", () => {
     const result = recalculateRebarQuantityCandidate(
       createBeamMainCandidate({
@@ -210,6 +228,49 @@ describe("recalculateRebarQuantityCandidate beam stirrup segmented spacing", () 
 
     expect(result.barCount).toBe(31);
     expect(result.beamStirrupTotalCount).toBeUndefined();
+    expect(result.quantityReviewRequired).toBe(false);
+  });
+
+  it("suggests 0.4S end spacing for segmented stirrups", () => {
+    const result = recalculateRebarQuantityCandidate(
+      createBeamStirrupCandidate({
+        beamStirrupCalculationMode: "segmented_spacing",
+        beamStirrupUseAutoEndSpacing: true,
+        beamStirrupCenterSpacingMm: 250
+      })
+    );
+
+    expect(result.beamStirrupLeftSpacingMm).toBe(100);
+    expect(result.beamStirrupRightSpacingMm).toBe(100);
+    expect(result.quantityReviewRequired).toBe(false);
+  });
+});
+
+describe("recalculateRebarQuantityCandidate beam main segmented layout", () => {
+  it("calculates top and bottom main bars by end and center zones", () => {
+    const result = recalculateRebarQuantityCandidate(
+      createBeamMainCandidate({
+        memberLengthMm: 6000,
+        beamMainCalculationMode: "segmented_layout",
+        beamMainEndZoneMode: "ratio",
+        beamMainEndZoneRatio: 0.25,
+        beamMainTopLeftCount: 5,
+        beamMainTopCenterCount: 3,
+        beamMainTopRightCount: 5,
+        beamMainBottomLeftCount: 3,
+        beamMainBottomCenterCount: 3,
+        beamMainBottomRightCount: 3,
+        manualBarCount: undefined,
+        barCount: undefined
+      })
+    );
+
+    expect(result.beamMainLeftEndLengthMm).toBe(1500);
+    expect(result.beamMainCenterLengthMm).toBe(3000);
+    expect(result.beamMainRightEndLengthMm).toBe(1500);
+    expect(result.beamMainTotalCount).toBe(22);
+    expect(result.barCount).toBe(22);
+    expect(result.quantityKg).toBeGreaterThan(0);
     expect(result.quantityReviewRequired).toBe(false);
   });
 });

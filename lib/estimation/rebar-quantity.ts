@@ -1,5 +1,6 @@
 import type {
   EstimateItemRecord,
+  BeamMainCalculationMode,
   BeamStirrupEndZoneMode,
   PdfTextExtractionResult,
   PdfPageTextRecord,
@@ -33,6 +34,7 @@ const defaultDeductionLengthMm = 0;
 const defaultBendCorrectionMm = 0;
 const defaultLossRate = 0.03;
 const defaultFaceCount = 1;
+const beamStirrupEndSpacingFactor = 0.4;
 const rebarDiameterPattern = "(?:H?D)\\s*-?\\s*(10|13|16|19|22|25|29|32)";
 const rebarCountRegex = new RegExp(`\\b(\\d{1,3})\\s*[- ]\\s*${rebarDiameterPattern}\\b`, "gi");
 const rebarSpacingRegex = new RegExp(`\\b${rebarDiameterPattern}\\s*@\\s*(\\d{2,4})\\b`, "gi");
@@ -1136,21 +1138,22 @@ export function getMissingRebarRequiredInputLabels(
       const centerSpacing = candidate.beamStirrupCenterSpacingMm ?? candidate.spacingMm;
       const autoEndSpacing =
         candidate.beamStirrupUseAutoEndSpacing !== false && hasPositiveInput(centerSpacing)
-          ? Math.max(1, Math.floor((centerSpacing ?? 0) / 2))
+          ? Math.max(1, Math.floor((centerSpacing ?? 0) * beamStirrupEndSpacingFactor))
           : undefined;
       const leftSpacing = candidate.beamStirrupLeftSpacingMm ?? autoEndSpacing;
       const rightSpacing = candidate.beamStirrupRightSpacingMm ?? autoEndSpacing;
       const leftLength = candidate.beamStirrupLeftEndLengthMm;
       const rightLength = candidate.beamStirrupRightEndLengthMm;
       const centerLength = candidate.beamStirrupCenterLengthMm;
+      const hasDirectStirrupTotalCount = hasPositiveInput(candidate.manualBarCount);
 
       if (endZoneMode === "manual") {
         if (!hasPositiveInput(leftLength)) missing.push("좌측 단부 길이");
         if (!hasPositiveInput(rightLength)) missing.push("우측 단부 길이");
       }
-      if (!hasPositiveInput(leftSpacing)) missing.push("좌측 단부 간격");
-      if (!hasPositiveInput(centerSpacing)) missing.push("중앙부 간격");
-      if (!hasPositiveInput(rightSpacing)) missing.push("우측 단부 간격");
+      if (!hasDirectStirrupTotalCount && !hasPositiveInput(leftSpacing)) missing.push("좌측 단부 간격");
+      if (!hasDirectStirrupTotalCount && !hasPositiveInput(centerSpacing)) missing.push("중앙부 간격");
+      if (!hasDirectStirrupTotalCount && !hasPositiveInput(rightSpacing)) missing.push("우측 단부 간격");
       if (
         hasPositiveInput(candidate.memberLengthMm) &&
         hasPositiveInput(leftLength) &&
@@ -1169,7 +1172,20 @@ export function getMissingRebarRequiredInputLabels(
         missing.push("구간 길이 검토 필요");
       }
     } else if (isBeamMain) {
-      if (!hasPositiveInput(candidate.manualBarCount)) {
+      if (candidate.beamMainCalculationMode === "segmented_layout") {
+        const hasSegmentCount = [
+          candidate.beamMainTopLeftCount,
+          candidate.beamMainTopCenterCount,
+          candidate.beamMainTopRightCount,
+          candidate.beamMainBottomLeftCount,
+          candidate.beamMainBottomCenterCount,
+          candidate.beamMainBottomRightCount
+        ].some(hasPositiveInput);
+
+        if (!hasSegmentCount && !hasPositiveInput(candidate.manualBarCount)) {
+          missing.push("직접 본수");
+        }
+      } else if (!hasPositiveInput(candidate.manualBarCount)) {
         missing.push("직접 본수");
       }
     } else if (isBeamStirrupOrShear) {
@@ -1394,12 +1410,12 @@ export function recalculateRebarQuantityCandidate(
         const leftSpacing =
           candidate.beamStirrupLeftSpacingMm ??
           (candidate.beamStirrupUseAutoEndSpacing !== false && centerSpacing
-            ? Math.max(1, Math.floor(centerSpacing / 2))
+            ? Math.max(1, Math.floor(centerSpacing * beamStirrupEndSpacingFactor))
             : undefined);
         const rightSpacing =
           candidate.beamStirrupRightSpacingMm ??
           (candidate.beamStirrupUseAutoEndSpacing !== false && centerSpacing
-            ? Math.max(1, Math.floor(centerSpacing / 2))
+            ? Math.max(1, Math.floor(centerSpacing * beamStirrupEndSpacingFactor))
             : undefined);
         const leftEndLength = resolveBeamStirrupEndLength(
           endZoneMode,
@@ -1435,7 +1451,8 @@ export function recalculateRebarQuantityCandidate(
           candidate.beamStirrupRightCountOverride,
           "ceil_plus_one"
         );
-        const totalCount = leftCount + centerCount + rightCount;
+        const directTotalCount = manualBarCount > 0 ? manualBarCount : 0;
+        const totalCount = directTotalCount > 0 ? directTotalCount : leftCount + centerCount + rightCount;
         const unitLengthMm = Math.max(
           0,
           2 * (candidate.sectionWidthMm - 2 * cover) +
@@ -1447,7 +1464,7 @@ export function recalculateRebarQuantityCandidate(
         const netWeightKg =
           singleBarLengthM * totalCount * unitWeight * memberCount * faceCount;
         const materialWeightKg = netWeightKg * (1 + lossRate);
-        const spacingMissing = !leftSpacing || !centerSpacing || !rightSpacing;
+        const spacingMissing = directTotalCount <= 0 && (!leftSpacing || !centerSpacing || !rightSpacing);
         const invalid =
           segmentLengthExceeded ||
           spacingMissing ||
@@ -1457,6 +1474,7 @@ export function recalculateRebarQuantityCandidate(
         const segmentNote = [
           segmentLengthExceeded ? "구간 길이 검토 필요" : null,
           spacingMissing ? "단부/중앙부 간격 확인 필요" : null,
+          directTotalCount > 0 ? "직접 본수를 총 늑근 본수로 우선 적용합니다." : null,
           "단부/중앙부 구간 길이와 간격은 보 배근상세 및 구조평면도 확인 후 보정해야 합니다.",
           "경계 중복 방지를 위해 좌측 단부는 시작 스터럽을 포함하고 중앙부/우측 단부는 floor(length / spacing)을 기본 적용합니다."
         ]
@@ -1560,6 +1578,114 @@ export function recalculateRebarQuantityCandidate(
         basis:
           "보 늑근: 개수는 보 길이 / 간격 기준, 1개 길이는 2x(보 폭 - 2x피복) + 2x(보 춤 - 2x피복) + 갈고리 + 절곡 보정입니다."
       });
+    }
+
+    const beamMainMode: BeamMainCalculationMode = candidate.beamMainCalculationMode ?? "single_length";
+
+    if (beamMainMode === "segmented_layout") {
+      const endZoneMode = candidate.beamMainEndZoneMode ?? "ratio";
+      const endZoneRatio =
+        typeof candidate.beamMainEndZoneRatio === "number" &&
+        Number.isFinite(candidate.beamMainEndZoneRatio) &&
+        candidate.beamMainEndZoneRatio >= 0
+          ? candidate.beamMainEndZoneRatio
+          : 0.25;
+      const leftEndLength = resolveBeamStirrupEndLength(
+        endZoneMode,
+        candidate.memberLengthMm,
+        candidate.sectionDepthMm ?? 0,
+        endZoneRatio,
+        candidate.beamMainLeftEndLengthMm
+      );
+      const rightEndLength = resolveBeamStirrupEndLength(
+        endZoneMode,
+        candidate.memberLengthMm,
+        candidate.sectionDepthMm ?? 0,
+        endZoneRatio,
+        candidate.beamMainRightEndLengthMm
+      );
+      const centerLength = Math.max(0, candidate.memberLengthMm - leftEndLength - rightEndLength);
+      const segmentLengthExceeded = leftEndLength + rightEndLength > candidate.memberLengthMm;
+      const topLeftCount = positiveOrDefault(candidate.beamMainTopLeftCount, 0);
+      const topCenterCount = positiveOrDefault(candidate.beamMainTopCenterCount, 0);
+      const topRightCount = positiveOrDefault(candidate.beamMainTopRightCount, 0);
+      const bottomLeftCount = positiveOrDefault(candidate.beamMainBottomLeftCount, 0);
+      const bottomCenterCount = positiveOrDefault(candidate.beamMainBottomCenterCount, 0);
+      const bottomRightCount = positiveOrDefault(candidate.beamMainBottomRightCount, 0);
+      const totalCount =
+        topLeftCount +
+        topCenterCount +
+        topRightCount +
+        bottomLeftCount +
+        bottomCenterCount +
+        bottomRightCount;
+      const segmentAdjustmentMm = anchorage + splice + hook + bend - deduction;
+      const leftSingleLengthM = Math.max(0, leftEndLength + segmentAdjustmentMm) / 1000;
+      const centerSingleLengthM = Math.max(0, centerLength + segmentAdjustmentMm) / 1000;
+      const rightSingleLengthM = Math.max(0, rightEndLength + segmentAdjustmentMm) / 1000;
+      const totalBarLengthM =
+        leftSingleLengthM * (topLeftCount + bottomLeftCount) +
+        centerSingleLengthM * (topCenterCount + bottomCenterCount) +
+        rightSingleLengthM * (topRightCount + bottomRightCount);
+      const averageBarLengthM = totalCount > 0 ? totalBarLengthM / totalCount : 0;
+      const netWeightKg = totalBarLengthM * unitWeight * memberCount * faceCount;
+      const materialWeightKg = netWeightKg * (1 + lossRate);
+      const invalid =
+        segmentLengthExceeded ||
+        totalCount <= 0 ||
+        totalBarLengthM <= 0 ||
+        netWeightKg <= 0;
+      const segmentNote = [
+        segmentLengthExceeded ? "구간 길이 검토 필요" : null,
+        "상부/하부 주근을 좌측 단부, 중앙부, 우측 단부로 분리 산출합니다.",
+        "단부와 중앙부의 상하부 배근이 다른 보 일람표는 각 구간 본수를 별도 입력해 보정해야 합니다."
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      return {
+        ...base,
+        position: "main",
+        rebarRole: "main",
+        beamMainCalculationMode: "segmented_layout",
+        beamMainEndZoneMode: endZoneMode,
+        beamMainEndZoneRatio: endZoneRatio,
+        beamMainLeftEndLengthMm: roundQuantity(leftEndLength, 1),
+        beamMainCenterLengthMm: roundQuantity(centerLength, 1),
+        beamMainRightEndLengthMm: roundQuantity(rightEndLength, 1),
+        beamMainTopLeftCount: topLeftCount || undefined,
+        beamMainTopCenterCount: topCenterCount || undefined,
+        beamMainTopRightCount: topRightCount || undefined,
+        beamMainBottomLeftCount: bottomLeftCount || undefined,
+        beamMainBottomCenterCount: bottomCenterCount || undefined,
+        beamMainBottomRightCount: bottomRightCount || undefined,
+        beamMainTotalCount: totalCount,
+        beamMainSegmentNote: segmentNote,
+        barCount: totalCount,
+        singleBarLengthM: roundQuantity(averageBarLengthM, 3),
+        quantityKg: invalid ? 0 : roundQuantity(netWeightKg, 2),
+        quantityTon: invalid ? 0 : roundQuantity(netWeightKg / 1000, 4),
+        materialQuantityKg: invalid ? 0 : roundQuantity(materialWeightKg, 2),
+        materialQuantityTon: invalid ? 0 : roundQuantity(materialWeightKg / 1000, 4),
+        calculationFormula:
+          "현재 산출 모드: 보 주근 - 단부·중앙부 상하부 분리. " +
+          `좌측 단부 ${roundQuantity(leftEndLength, 1)}mm: 상부 ${topLeftCount}본 / 하부 ${bottomLeftCount}본, ` +
+          `중앙부 ${roundQuantity(centerLength, 1)}mm: 상부 ${topCenterCount}본 / 하부 ${bottomCenterCount}본, ` +
+          `우측 단부 ${roundQuantity(rightEndLength, 1)}mm: 상부 ${topRightCount}본 / 하부 ${bottomRightCount}본, ` +
+          `총 길이 ${roundQuantity(totalBarLengthM, 3)}m x ${unitWeight}kg/m x ${memberCount}EA x ${faceCount}면 = ${roundQuantity(netWeightKg, 2)}kg, ` +
+          `자재중량 = 정미중량 x (1 + LOSS율 ${lossRate}) = ${roundQuantity(materialWeightKg, 2)}kg`,
+        calculationBasis: [
+          "보 주근: 단부와 중앙부의 상부/하부 배근이 다를 때 구간별 본수 x 구간 길이로 정미중량을 산출합니다.",
+          "각 구간 1본 길이는 구간 길이 + 정착 + 이음 + 갈고리 + 절곡보정 - 공제입니다.",
+          "자재중량은 정미중량 x (1 + LOSS율)입니다.",
+          segmentNote,
+          getGeneralRuleBasis(base)
+        ]
+          .filter(Boolean)
+          .join(" "),
+        quantityReviewRequired: invalid,
+        note: invalid ? "보 주근 구간별 산출 조건 확인 필요" : "보 주근 구간별 실무식 적용"
+      };
     }
 
     const barCount = manualBarCount;

@@ -82,6 +82,8 @@ export type RebarRole = "main" | "stirrup" | "shear" | "unknown";
 
 export type BeamStirrupCalculationMode = "single_spacing" | "segmented_spacing";
 
+export type BeamMainCalculationMode = "single_length" | "segmented_layout";
+
 export type BeamStirrupEndZoneMode = "ratio" | "manual" | "two_depth";
 
 export type RebarReviewCompleteness = "complete" | "partial" | "not_started";
@@ -471,6 +473,20 @@ export interface RebarQuantityCandidateRecord {
     beamStirrupTotalCount?: number;
     beamStirrupUnitLengthMm?: number;
     beamStirrupSegmentNote?: string;
+    beamMainCalculationMode?: BeamMainCalculationMode;
+    beamMainEndZoneMode?: BeamStirrupEndZoneMode;
+    beamMainEndZoneRatio?: number;
+    beamMainLeftEndLengthMm?: number;
+    beamMainCenterLengthMm?: number;
+    beamMainRightEndLengthMm?: number;
+    beamMainTopLeftCount?: number;
+    beamMainTopCenterCount?: number;
+    beamMainTopRightCount?: number;
+    beamMainBottomLeftCount?: number;
+    beamMainBottomCenterCount?: number;
+    beamMainBottomRightCount?: number;
+    beamMainTotalCount?: number;
+    beamMainSegmentNote?: string;
     footingLayer?: RebarFootingLayer;
   memberCount: number;
   singleBarLengthM?: number;
