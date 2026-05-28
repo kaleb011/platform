@@ -76,6 +76,10 @@ function formatWon(value: number) {
   return `${formatNumber(value, 0)}원`;
 }
 
+function formatOptionalWon(value: number | null) {
+  return value === null ? "-" : formatWon(value);
+}
+
 function Field({
   label,
   children
@@ -141,6 +145,8 @@ export function RebarStandardEstimatePanel({
   const [craneCost, setCraneCost] = useState("");
   const [transportCost, setTransportCost] = useState("");
   const [shopDrawingCost, setShopDrawingCost] = useState("");
+  const [constructionDurationDays, setConstructionDurationDays] = useState("");
+  const [rebarStockCapacityTon, setRebarStockCapacityTon] = useState("");
 
   const summary = useMemo(
     () =>
@@ -176,6 +182,7 @@ export function RebarStandardEstimatePanel({
       processingMethod,
       steelConcurrent,
       complexStructure,
+      constructionDurationDays: parsePositiveNumber(constructionDurationDays),
       rebarWorkerWage: parsePositiveNumber(rebarWorkerWage),
       commonWorkerWage: parsePositiveNumber(commonWorkerWage),
       rebarMaterialUnitPrices,
@@ -191,6 +198,7 @@ export function RebarStandardEstimatePanel({
     bindingWireUnitPrice,
     commonWorkerWage,
     complexStructure,
+    constructionDurationDays,
     craneCost,
     materialUnitPrices,
     processingMethod,
@@ -215,6 +223,19 @@ export function RebarStandardEstimatePanel({
   const priceRequiredCount = estimateItems.filter(
     (item) => item.reviewStatus === "price_required"
   ).length;
+  const durationDays = settings.constructionDurationDays;
+  const totalLaborCost = estimateItems.reduce((sum, item) => sum + item.laborCost, 0);
+  const totalExpenseCost = estimateItems.reduce((sum, item) => sum + item.expenseCost, 0);
+  const dailyLaborCost = durationDays ? totalLaborCost / durationDays : null;
+  const dailyExpenseCost = durationDays ? totalExpenseCost / durationDays : null;
+  const stockCapacityTon = parsePositiveNumber(rebarStockCapacityTon) ?? 0;
+  const orderProgressPercent =
+    summary.totalWeightTon > 0
+      ? Math.min(100, (stockCapacityTon / summary.totalWeightTon) * 100)
+      : 0;
+  const orderProgressLabel = formatNumber(orderProgressPercent, 1);
+  const availableOrderTon = Math.min(stockCapacityTon, summary.totalWeightTon);
+  const remainingOrderTon = Math.max(summary.totalWeightTon - stockCapacityTon, 0);
 
   useEffect(() => {
     if (summary.recommendedType === "building_type_1" || summary.recommendedType === "building_type_2") {
@@ -305,6 +326,68 @@ export function RebarStandardEstimatePanel({
         </p>
       </section>
 
+      <section className="mt-4 rounded-[18px] border border-border bg-white px-4 py-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h3 className="text-[14px] font-bold text-foreground">현장 발주 대시보드</h3>
+                <p className="mt-1 text-[12px] leading-5 text-slate">
+                  현장 적체 가능량을 승인 철근 총량과 비교해 1차 발주 가능량과 남은 발주량을 확인합니다.
+                </p>
+              </div>
+              <div className="w-full md:w-[220px]">
+                <NumberInput
+                  label="철근 적체 가능량"
+                  onChange={setRebarStockCapacityTon}
+                  unit="ton"
+                  value={rebarStockCapacityTon}
+                />
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
+                <p className="text-[11px] font-medium text-slate">총 산출 철근량</p>
+                <p className="mt-1 text-[18px] font-bold text-foreground">
+                  {formatNumber(summary.totalWeightTon, 4)} ton
+                </p>
+              </div>
+              <div className="rounded-[14px] border border-border bg-[#eef6f1] px-3 py-3">
+                <p className="text-[11px] font-medium text-slate">발주 가능량</p>
+                <p className="mt-1 text-[18px] font-bold text-foreground">
+                  {formatNumber(availableOrderTon, 4)} ton
+                </p>
+              </div>
+              <div className="rounded-[14px] border border-border bg-[#fff8ea] px-3 py-3">
+                <p className="text-[11px] font-medium text-[#7a4a05]">남은 발주량</p>
+                <p className="mt-1 text-[18px] font-bold text-[#7a4a05]">
+                  {formatNumber(remainingOrderTon, 4)} ton
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex min-h-[180px] w-full flex-col items-center justify-center rounded-[16px] border border-border bg-[#f8fafc] px-4 py-4 xl:w-[260px]">
+            <div
+              aria-label={`철근 발주 가능 비율 ${orderProgressLabel}%`}
+              className="flex h-28 w-28 items-center justify-center rounded-full"
+              role="img"
+              style={{
+                background: `conic-gradient(#1c7c54 ${orderProgressPercent}%, #e2e8f0 0)`
+              }}
+            >
+              <div className="flex h-20 w-20 flex-col items-center justify-center rounded-full bg-white shadow-sm">
+                <span className="text-[24px] font-bold text-foreground">{orderProgressLabel}%</span>
+                <span className="text-[10px] font-semibold text-slate">발주 가능</span>
+              </div>
+            </div>
+            <p className="mt-3 text-center text-[12px] leading-5 text-slate">
+              적체 가능량이 총량을 넘으면 발주 비율은 100%로 표시됩니다.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section className="mt-4 rounded-[18px] border border-border bg-[#f8fafc] px-4 py-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -379,6 +462,7 @@ export function RebarStandardEstimatePanel({
       <section className="mt-4 rounded-[18px] border border-border px-4 py-4">
         <h3 className="text-[14px] font-bold text-foreground">단가 입력</h3>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <NumberInput label="공사일수" onChange={setConstructionDurationDays} unit="일" value={constructionDurationDays} />
           <NumberInput label="철근공 노임단가" onChange={setRebarWorkerWage} unit="원/인" value={rebarWorkerWage} />
           <NumberInput label="보통인부 노임단가" onChange={setCommonWorkerWage} unit="원/인" value={commonWorkerWage} />
           {visibleDiameters.map((diameter) => (
@@ -409,10 +493,24 @@ export function RebarStandardEstimatePanel({
           <NumberInput label="현장 내 운반비" onChange={setTransportCost} unit="원" value={transportCost} />
           <NumberInput label="shop drawing 작성비" onChange={setShopDrawingCost} unit="원" value={shopDrawingCost} />
         </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-[14px] bg-[#f8fafc] px-3 py-3">
+            <p className="text-[11px] font-medium text-slate">공사일수 기준 일별 노무비</p>
+            <p className="mt-1 text-[18px] font-bold text-foreground">
+              {formatOptionalWon(dailyLaborCost)}
+            </p>
+          </div>
+          <div className="rounded-[14px] bg-[#f8fafc] px-3 py-3">
+            <p className="text-[11px] font-medium text-slate">공사일수 기준 일별 경비</p>
+            <p className="mt-1 text-[18px] font-bold text-foreground">
+              {formatOptionalWon(dailyExpenseCost)}
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="mt-4 overflow-x-auto">
-        <table className="min-w-[1320px] text-left">
+        <table className="min-w-[1480px] text-left">
           <thead>
             <tr className="border-b border-border text-[12px] text-slate">
               <th className="px-2 py-3 font-medium">구분</th>
@@ -424,6 +522,8 @@ export function RebarStandardEstimatePanel({
               <th className="px-2 py-3 font-medium">재료비</th>
               <th className="px-2 py-3 font-medium">노무비</th>
               <th className="px-2 py-3 font-medium">경비</th>
+              <th className="px-2 py-3 font-medium">일별 노무비</th>
+              <th className="px-2 py-3 font-medium">일별 경비</th>
               <th className="px-2 py-3 font-medium">합계금액</th>
               <th className="px-2 py-3 font-medium">품셈근거</th>
               <th className="px-2 py-3 font-medium">산출근거</th>
@@ -453,6 +553,12 @@ export function RebarStandardEstimatePanel({
                 </td>
                 <td className="px-2 py-4 text-[13px] text-foreground">
                   {formatWon(item.expenseCost)}
+                </td>
+                <td className="px-2 py-4 text-[13px] text-foreground">
+                  {formatOptionalWon(durationDays ? item.laborCost / durationDays : null)}
+                </td>
+                <td className="px-2 py-4 text-[13px] text-foreground">
+                  {formatOptionalWon(durationDays ? item.expenseCost / durationDays : null)}
                 </td>
                 <td className="px-2 py-4 text-[13px] font-semibold text-foreground">
                   {formatWon(item.totalCost)}

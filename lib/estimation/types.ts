@@ -580,6 +580,7 @@ export interface RebarStandardSettings {
   processingMethod: RebarProcessingMethod;
   steelConcurrent: boolean;
   complexStructure: boolean;
+  constructionDurationDays?: number;
   rebarWorkerWage?: number;
   commonWorkerWage?: number;
   rebarMaterialUnitPrices: Record<string, number | undefined>;

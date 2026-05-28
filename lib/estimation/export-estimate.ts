@@ -665,6 +665,14 @@ function renderExcelTable(headers: string[], rows: Array<Array<string | number>>
   `;
 }
 
+function getDailyCostCell(value: number, durationDays?: number): string | number {
+  if (!durationDays || durationDays <= 0) {
+    return "";
+  }
+
+  return Math.round(value / durationDays);
+}
+
 export function exportRebarStandardEstimateToExcel(
   summary: RebarStandardSummary,
   settings: RebarStandardSettings,
@@ -688,6 +696,7 @@ export function exportRebarStandardEstimateToExcel(
     ["D13 이하 비율", `${summary.underD13Ratio}%`, ""],
     ["철골 병행 여부", settings.steelConcurrent ? "Y" : "N", ""],
     ["복잡 구조시설물 여부", settings.complexStructure ? "Y" : "N", ""],
+    ["공사일수", settings.constructionDurationDays ?? "", "일별 노무비/경비 환산 기준"],
     ["현장가공/공장가공", settings.processingMethod === "site_processing" ? "현장가공" : "공장가공", "공장가공은 후속 반영"],
     ["철근공 노임단가", settings.rebarWorkerWage ?? "", "원/인"],
     ["보통인부 노임단가", settings.commonWorkerWage ?? "", "원/인"]
@@ -704,6 +713,8 @@ export function exportRebarStandardEstimateToExcel(
     item.materialCost,
     item.laborCost,
     item.expenseCost,
+    getDailyCostCell(item.laborCost, settings.constructionDurationDays),
+    getDailyCostCell(item.expenseCost, settings.constructionDurationDays),
     item.totalCost,
     item.standardCode,
     item.basis,
@@ -752,6 +763,8 @@ export function exportRebarStandardEstimateToExcel(
             "재료비",
             "노무비",
             "경비",
+            "일별 노무비",
+            "일별 경비",
             "합계금액",
             "품셈근거",
             "산출근거",
