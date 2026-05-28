@@ -267,7 +267,7 @@ export function RebarStandardEstimatePanel({
   }
 
   return (
-    <Card className="section-enter bg-white shadow-sm">
+    <Card className="section-enter min-w-0 overflow-hidden bg-white !p-3 shadow-sm sm:!p-4">
       <SectionHeading
         title="철근 품셈 적용 산출"
         description="승인된 철근 수량을 기준으로 철근 본재, 현장가공, 현장조립, 결속선, 간격재, 별도계상 항목을 재료비·노무비·경비로 분리합니다."
@@ -319,14 +319,14 @@ export function RebarStandardEstimatePanel({
         </div>
       </section>
 
-      <section className="mt-4 rounded-[14px] border border-border bg-[#f8fafc] px-4 py-3 text-[12px] leading-5 text-slate">
+      <section className="mt-3 rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3 text-[12px] leading-5 text-slate sm:px-4">
         <p className="font-semibold text-foreground">수량 기준 안내</p>
         <p className="mt-1">
           철근 가공/조립 품셈 수량은 승인된 정미중량 기준입니다. 철근 본재 재료비 검토는 LOSS율이 반영된 자재중량을 참고하세요.
         </p>
       </section>
 
-      <section className="mt-4 rounded-[18px] border border-border bg-[#f8fafc] px-4 py-4">
+      <section className="mt-3 rounded-[16px] border border-border bg-[#f8fafc] px-3 py-3 sm:px-4 sm:py-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="text-[14px] font-bold text-foreground">품셈 적용 설정</h3>
@@ -340,7 +340,7 @@ export function RebarStandardEstimatePanel({
             추천 Type 적용
           </Button>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
           <Field label="공사구분">
             <select
               className="mt-1 h-10 w-full rounded-[10px] border border-border bg-white px-3 text-[13px] font-semibold text-foreground"
@@ -397,9 +397,9 @@ export function RebarStandardEstimatePanel({
         </div>
       </section>
 
-      <section className="mt-4 rounded-[18px] border border-border px-4 py-4">
+      <section className="mt-3 rounded-[16px] border border-border px-3 py-3 sm:px-4 sm:py-4">
         <h3 className="text-[14px] font-bold text-foreground">단가 입력</h3>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           <NumberInput label="공사일수" onChange={setConstructionDurationDays} unit="일" value={constructionDurationDays} />
           <NumberInput label="철근공 노임단가" onChange={setRebarWorkerWage} unit="원/인" value={rebarWorkerWage} />
           <NumberInput label="보통인부 노임단가" onChange={setCommonWorkerWage} unit="원/인" value={commonWorkerWage} />
@@ -431,7 +431,7 @@ export function RebarStandardEstimatePanel({
           <NumberInput label="현장 내 운반비" onChange={setTransportCost} unit="원" value={transportCost} />
           <NumberInput label="shop drawing 작성비" onChange={setShopDrawingCost} unit="원" value={shopDrawingCost} />
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="rounded-[14px] bg-[#f8fafc] px-3 py-3">
             <p className="text-[11px] font-medium text-slate">공사일수 기준 일별 노무비</p>
             <p className="mt-1 text-[18px] font-bold text-foreground">
@@ -447,65 +447,65 @@ export function RebarStandardEstimatePanel({
         </div>
       </section>
 
-      <section className="mt-4 overflow-x-auto">
-        <table className="min-w-[1480px] text-left">
+      <section className="mt-3 max-w-full overflow-x-auto">
+        <table className="w-full min-w-[1160px] table-fixed text-left">
           <thead>
             <tr className="border-b border-border text-[12px] text-slate">
-              <th className="px-2 py-3 font-medium">구분</th>
-              <th className="px-2 py-3 font-medium">세부공종</th>
-              <th className="px-2 py-3 font-medium">품명</th>
-              <th className="px-2 py-3 font-medium">규격</th>
-              <th className="px-2 py-3 font-medium">수량</th>
-              <th className="px-2 py-3 font-medium">단위</th>
-              <th className="px-2 py-3 font-medium">재료비</th>
-              <th className="px-2 py-3 font-medium">노무비</th>
-              <th className="px-2 py-3 font-medium">경비</th>
-              <th className="px-2 py-3 font-medium">일별 노무비</th>
-              <th className="px-2 py-3 font-medium">일별 경비</th>
-              <th className="px-2 py-3 font-medium">합계금액</th>
-              <th className="px-2 py-3 font-medium">품셈근거</th>
-              <th className="px-2 py-3 font-medium">산출근거</th>
-              <th className="px-2 py-3 font-medium">상태</th>
+              <th className="w-[72px] px-1.5 py-2.5 font-medium">구분</th>
+              <th className="w-[100px] px-1.5 py-2.5 font-medium">세부공종</th>
+              <th className="w-[120px] px-1.5 py-2.5 font-medium">품명</th>
+              <th className="w-[110px] px-1.5 py-2.5 font-medium">규격</th>
+              <th className="w-[72px] px-1.5 py-2.5 font-medium">수량</th>
+              <th className="w-[58px] px-1.5 py-2.5 font-medium">단위</th>
+              <th className="w-[86px] px-1.5 py-2.5 font-medium">재료비</th>
+              <th className="w-[86px] px-1.5 py-2.5 font-medium">노무비</th>
+              <th className="w-[80px] px-1.5 py-2.5 font-medium">경비</th>
+              <th className="w-[88px] px-1.5 py-2.5 font-medium">일별 노무비</th>
+              <th className="w-[82px] px-1.5 py-2.5 font-medium">일별 경비</th>
+              <th className="w-[88px] px-1.5 py-2.5 font-medium">합계금액</th>
+              <th className="w-[120px] px-1.5 py-2.5 font-medium">품셈근거</th>
+              <th className="w-[128px] px-1.5 py-2.5 font-medium">산출근거</th>
+              <th className="w-[96px] px-1.5 py-2.5 font-medium">상태</th>
             </tr>
           </thead>
           <tbody>
             {estimateItems.map((item) => (
               <tr className="border-b border-border/70 align-top" key={item.id}>
-                <td className="px-2 py-4 text-[13px] font-semibold text-foreground">
+                <td className="break-keep px-1.5 py-3 text-[12px] font-semibold text-foreground">
                   {categoryLabel[item.category]}
                 </td>
-                <td className="px-2 py-4 text-[13px] text-foreground">{item.workCategory}</td>
-                <td className="px-2 py-4 text-[13px] font-semibold text-foreground">
+                <td className="break-keep px-1.5 py-3 text-[12px] text-foreground">{item.workCategory}</td>
+                <td className="break-keep px-1.5 py-3 text-[12px] font-semibold text-foreground">
                   {item.itemName}
                 </td>
-                <td className="px-2 py-4 text-[13px] text-foreground">{item.specification}</td>
-                <td className="px-2 py-4 text-[13px] text-foreground">
+                <td className="break-words px-1.5 py-3 text-[12px] text-foreground">{item.specification}</td>
+                <td className="px-1.5 py-3 text-[12px] text-foreground">
                   {item.quantity > 0 ? formatNumber(item.quantity, 4) : "-"}
                 </td>
-                <td className="px-2 py-4 text-[13px] text-foreground">{item.unit}</td>
-                <td className="px-2 py-4 text-[13px] text-foreground">
+                <td className="px-1.5 py-3 text-[12px] text-foreground">{item.unit}</td>
+                <td className="px-1.5 py-3 text-[12px] text-foreground">
                   {formatWon(item.materialCost)}
                 </td>
-                <td className="px-2 py-4 text-[13px] text-foreground">
+                <td className="px-1.5 py-3 text-[12px] text-foreground">
                   {formatWon(item.laborCost)}
                 </td>
-                <td className="px-2 py-4 text-[13px] text-foreground">
+                <td className="px-1.5 py-3 text-[12px] text-foreground">
                   {formatWon(item.expenseCost)}
                 </td>
-                <td className="px-2 py-4 text-[13px] text-foreground">
+                <td className="px-1.5 py-3 text-[12px] text-foreground">
                   {formatOptionalWon(durationDays ? item.laborCost / durationDays : null)}
                 </td>
-                <td className="px-2 py-4 text-[13px] text-foreground">
+                <td className="px-1.5 py-3 text-[12px] text-foreground">
                   {formatOptionalWon(durationDays ? item.expenseCost / durationDays : null)}
                 </td>
-                <td className="px-2 py-4 text-[13px] font-semibold text-foreground">
+                <td className="px-1.5 py-3 text-[12px] font-semibold text-foreground">
                   {formatWon(item.totalCost)}
                 </td>
-                <td className="px-2 py-4 text-[12px] leading-5 text-slate">
+                <td className="break-words px-1.5 py-3 text-[11px] leading-4 text-slate">
                   {item.standardCode}
                 </td>
-                <td className="px-2 py-4 text-[12px] leading-5 text-slate">{item.basis}</td>
-                <td className="px-2 py-4">
+                <td className="break-words px-1.5 py-3 text-[11px] leading-4 text-slate">{item.basis}</td>
+                <td className="px-1.5 py-3">
                   <Badge tone={statusTone[item.reviewStatus]}>
                     {statusLabel[item.reviewStatus]}
                   </Badge>
@@ -516,18 +516,18 @@ export function RebarStandardEstimatePanel({
         </table>
       </section>
 
-      <section className="mt-5 rounded-[18px] border border-border bg-[#f8fafc] px-4 py-5">
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(300px,1fr)_minmax(320px,440px)] xl:items-center">
+      <section className="mt-4 rounded-[16px] border border-border bg-[#f8fafc] px-3 py-4 sm:px-4">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(260px,1fr)_minmax(280px,360px)] xl:items-center">
           <div className="min-w-0">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
                 <p className="text-[12px] font-semibold text-primary">현장 발주 판단</p>
-                <h3 className="mt-1 text-[18px] font-bold text-foreground">철근 발주 대시보드</h3>
+                <h3 className="mt-1 text-[17px] font-bold text-foreground">철근 발주 대시보드</h3>
                 <p className="mt-2 text-[12px] leading-5 text-slate">
                   현장 적체 가능량을 입력하면 총 산출 철근량 중 발주된 철근량과 남은 철근량을 한눈에 비교합니다.
                 </p>
               </div>
-              <div className="w-full md:w-[240px]">
+              <div className="w-full md:w-[210px]">
                 <NumberInput
                   label="철근 적체 가능량"
                   onChange={setRebarStockCapacityTon}
@@ -537,53 +537,53 @@ export function RebarStandardEstimatePanel({
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-[14px] border border-border bg-white px-3 py-3">
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-[12px] border border-border bg-white px-2.5 py-2.5">
                 <p className="text-[11px] font-medium text-slate">총 산출 철근량</p>
-                <p className="mt-1 text-[20px] font-bold text-foreground">
+                <p className="mt-1 text-[18px] font-bold text-foreground">
                   {formatNumber(summary.totalWeightTon, 4)}
                   <span className="ml-1 text-[12px] font-semibold text-slate">ton</span>
                 </p>
               </div>
-              <div className="rounded-[14px] border border-[#b7ddc4] bg-[#eef6f1] px-3 py-3">
+              <div className="rounded-[12px] border border-[#b7ddc4] bg-[#eef6f1] px-2.5 py-2.5">
                 <p className="text-[11px] font-medium text-[#1c7c54]">발주된 철근량</p>
-                <p className="mt-1 text-[20px] font-bold text-[#1c7c54]">
+                <p className="mt-1 text-[18px] font-bold text-[#1c7c54]">
                   {formatNumber(availableOrderTon, 4)}
                   <span className="ml-1 text-[12px] font-semibold">ton</span>
                 </p>
               </div>
-              <div className="rounded-[14px] border border-[#edd8aa] bg-[#fff8ea] px-3 py-3">
+              <div className="rounded-[12px] border border-[#edd8aa] bg-[#fff8ea] px-2.5 py-2.5">
                 <p className="text-[11px] font-medium text-[#7a4a05]">남은 철근량</p>
-                <p className="mt-1 text-[20px] font-bold text-[#7a4a05]">
+                <p className="mt-1 text-[18px] font-bold text-[#7a4a05]">
                   {formatNumber(remainingOrderTon, 4)}
                   <span className="ml-1 text-[12px] font-semibold">ton</span>
                 </p>
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-2 text-[12px] leading-5 text-slate sm:grid-cols-2">
-              <div className="flex items-center gap-2 rounded-[12px] bg-white px-3 py-2">
+            <div className="mt-3 grid grid-cols-1 gap-2 text-[12px] leading-5 text-slate sm:grid-cols-2">
+              <div className="flex items-center gap-2 rounded-[10px] bg-white px-2.5 py-2">
                 <span className="h-3 w-3 rounded-full bg-[#1c7c54]" />
                 <span>발주된 철근량: {formatNumber(availableOrderTon, 4)} ton</span>
               </div>
-              <div className="flex items-center gap-2 rounded-[12px] bg-white px-3 py-2">
+              <div className="flex items-center gap-2 rounded-[10px] bg-white px-2.5 py-2">
                 <span className="h-3 w-3 rounded-full bg-[#f0b84b]" />
                 <span>남은 철근량: {formatNumber(remainingOrderTon, 4)} ton</span>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col items-center justify-center rounded-[18px] border border-border bg-white px-4 py-5 shadow-sm">
+          <div className="flex flex-col items-center justify-center rounded-[16px] border border-border bg-white px-3 py-4 shadow-sm">
             <div
               aria-label={`철근 발주 비율 ${orderProgressLabel}%, 발주된 철근량 ${formatNumber(availableOrderTon, 4)} ton, 남은 철근량 ${formatNumber(remainingOrderTon, 4)} ton`}
-              className="flex h-64 w-64 items-center justify-center rounded-full sm:h-72 sm:w-72"
+              className="flex h-52 w-52 items-center justify-center rounded-full sm:h-60 sm:w-60 xl:h-64 xl:w-64"
               role="img"
               style={{
                 background: `conic-gradient(#1c7c54 ${orderProgressPercent}%, #f0b84b 0)`
               }}
             >
-              <div className="flex h-44 w-44 flex-col items-center justify-center rounded-full bg-white px-4 text-center shadow-md sm:h-48 sm:w-48">
-                <span className="text-[34px] font-bold text-foreground">{orderProgressLabel}%</span>
+              <div className="flex h-36 w-36 flex-col items-center justify-center rounded-full bg-white px-3 text-center shadow-md sm:h-40 sm:w-40 xl:h-44 xl:w-44">
+                <span className="text-[28px] font-bold text-foreground sm:text-[32px]">{orderProgressLabel}%</span>
                 <span className="mt-1 text-[11px] font-semibold text-slate">발주 진행률</span>
                 <span className="mt-3 text-[12px] font-bold text-[#1c7c54]">
                   발주 {formatNumber(availableOrderTon, 3)} ton
@@ -593,7 +593,7 @@ export function RebarStandardEstimatePanel({
                 </span>
               </div>
             </div>
-            <p className="mt-4 max-w-[320px] text-center text-[12px] leading-5 text-slate">
+            <p className="mt-3 max-w-[280px] text-center text-[12px] leading-5 text-slate">
               적체 가능량이 총 산출 철근량보다 크면 발주 진행률은 100%로 표시됩니다.
             </p>
           </div>
