@@ -326,68 +326,6 @@ export function RebarStandardEstimatePanel({
         </p>
       </section>
 
-      <section className="mt-4 rounded-[18px] border border-border bg-white px-4 py-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <h3 className="text-[14px] font-bold text-foreground">현장 발주 대시보드</h3>
-                <p className="mt-1 text-[12px] leading-5 text-slate">
-                  현장 적체 가능량을 승인 철근 총량과 비교해 1차 발주 가능량과 남은 발주량을 확인합니다.
-                </p>
-              </div>
-              <div className="w-full md:w-[220px]">
-                <NumberInput
-                  label="철근 적체 가능량"
-                  onChange={setRebarStockCapacityTon}
-                  unit="ton"
-                  value={rebarStockCapacityTon}
-                />
-              </div>
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-[14px] border border-border bg-[#f8fafc] px-3 py-3">
-                <p className="text-[11px] font-medium text-slate">총 산출 철근량</p>
-                <p className="mt-1 text-[18px] font-bold text-foreground">
-                  {formatNumber(summary.totalWeightTon, 4)} ton
-                </p>
-              </div>
-              <div className="rounded-[14px] border border-border bg-[#eef6f1] px-3 py-3">
-                <p className="text-[11px] font-medium text-slate">발주 가능량</p>
-                <p className="mt-1 text-[18px] font-bold text-foreground">
-                  {formatNumber(availableOrderTon, 4)} ton
-                </p>
-              </div>
-              <div className="rounded-[14px] border border-border bg-[#fff8ea] px-3 py-3">
-                <p className="text-[11px] font-medium text-[#7a4a05]">남은 발주량</p>
-                <p className="mt-1 text-[18px] font-bold text-[#7a4a05]">
-                  {formatNumber(remainingOrderTon, 4)} ton
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex min-h-[180px] w-full flex-col items-center justify-center rounded-[16px] border border-border bg-[#f8fafc] px-4 py-4 xl:w-[260px]">
-            <div
-              aria-label={`철근 발주 가능 비율 ${orderProgressLabel}%`}
-              className="flex h-28 w-28 items-center justify-center rounded-full"
-              role="img"
-              style={{
-                background: `conic-gradient(#1c7c54 ${orderProgressPercent}%, #e2e8f0 0)`
-              }}
-            >
-              <div className="flex h-20 w-20 flex-col items-center justify-center rounded-full bg-white shadow-sm">
-                <span className="text-[24px] font-bold text-foreground">{orderProgressLabel}%</span>
-                <span className="text-[10px] font-semibold text-slate">발주 가능</span>
-              </div>
-            </div>
-            <p className="mt-3 text-center text-[12px] leading-5 text-slate">
-              적체 가능량이 총량을 넘으면 발주 비율은 100%로 표시됩니다.
-            </p>
-          </div>
-        </div>
-      </section>
-
       <section className="mt-4 rounded-[18px] border border-border bg-[#f8fafc] px-4 py-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -576,6 +514,90 @@ export function RebarStandardEstimatePanel({
             ))}
           </tbody>
         </table>
+      </section>
+
+      <section className="mt-5 rounded-[18px] border border-border bg-[#f8fafc] px-4 py-5">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(300px,1fr)_minmax(320px,440px)] xl:items-center">
+          <div className="min-w-0">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-[12px] font-semibold text-primary">현장 발주 판단</p>
+                <h3 className="mt-1 text-[18px] font-bold text-foreground">철근 발주 대시보드</h3>
+                <p className="mt-2 text-[12px] leading-5 text-slate">
+                  현장 적체 가능량을 입력하면 총 산출 철근량 중 발주된 철근량과 남은 철근량을 한눈에 비교합니다.
+                </p>
+              </div>
+              <div className="w-full md:w-[240px]">
+                <NumberInput
+                  label="철근 적체 가능량"
+                  onChange={setRebarStockCapacityTon}
+                  unit="ton"
+                  value={rebarStockCapacityTon}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-[14px] border border-border bg-white px-3 py-3">
+                <p className="text-[11px] font-medium text-slate">총 산출 철근량</p>
+                <p className="mt-1 text-[20px] font-bold text-foreground">
+                  {formatNumber(summary.totalWeightTon, 4)}
+                  <span className="ml-1 text-[12px] font-semibold text-slate">ton</span>
+                </p>
+              </div>
+              <div className="rounded-[14px] border border-[#b7ddc4] bg-[#eef6f1] px-3 py-3">
+                <p className="text-[11px] font-medium text-[#1c7c54]">발주된 철근량</p>
+                <p className="mt-1 text-[20px] font-bold text-[#1c7c54]">
+                  {formatNumber(availableOrderTon, 4)}
+                  <span className="ml-1 text-[12px] font-semibold">ton</span>
+                </p>
+              </div>
+              <div className="rounded-[14px] border border-[#edd8aa] bg-[#fff8ea] px-3 py-3">
+                <p className="text-[11px] font-medium text-[#7a4a05]">남은 철근량</p>
+                <p className="mt-1 text-[20px] font-bold text-[#7a4a05]">
+                  {formatNumber(remainingOrderTon, 4)}
+                  <span className="ml-1 text-[12px] font-semibold">ton</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-2 text-[12px] leading-5 text-slate sm:grid-cols-2">
+              <div className="flex items-center gap-2 rounded-[12px] bg-white px-3 py-2">
+                <span className="h-3 w-3 rounded-full bg-[#1c7c54]" />
+                <span>발주된 철근량: {formatNumber(availableOrderTon, 4)} ton</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-[12px] bg-white px-3 py-2">
+                <span className="h-3 w-3 rounded-full bg-[#f0b84b]" />
+                <span>남은 철근량: {formatNumber(remainingOrderTon, 4)} ton</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center justify-center rounded-[18px] border border-border bg-white px-4 py-5 shadow-sm">
+            <div
+              aria-label={`철근 발주 비율 ${orderProgressLabel}%, 발주된 철근량 ${formatNumber(availableOrderTon, 4)} ton, 남은 철근량 ${formatNumber(remainingOrderTon, 4)} ton`}
+              className="flex h-64 w-64 items-center justify-center rounded-full sm:h-72 sm:w-72"
+              role="img"
+              style={{
+                background: `conic-gradient(#1c7c54 ${orderProgressPercent}%, #f0b84b 0)`
+              }}
+            >
+              <div className="flex h-44 w-44 flex-col items-center justify-center rounded-full bg-white px-4 text-center shadow-md sm:h-48 sm:w-48">
+                <span className="text-[34px] font-bold text-foreground">{orderProgressLabel}%</span>
+                <span className="mt-1 text-[11px] font-semibold text-slate">발주 진행률</span>
+                <span className="mt-3 text-[12px] font-bold text-[#1c7c54]">
+                  발주 {formatNumber(availableOrderTon, 3)} ton
+                </span>
+                <span className="mt-1 text-[12px] font-bold text-[#7a4a05]">
+                  잔여 {formatNumber(remainingOrderTon, 3)} ton
+                </span>
+              </div>
+            </div>
+            <p className="mt-4 max-w-[320px] text-center text-[12px] leading-5 text-slate">
+              적체 가능량이 총 산출 철근량보다 크면 발주 진행률은 100%로 표시됩니다.
+            </p>
+          </div>
+        </div>
       </section>
     </Card>
   );
